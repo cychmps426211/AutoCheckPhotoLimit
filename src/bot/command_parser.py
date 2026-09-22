@@ -30,8 +30,9 @@ class CommandParser:
     DEFAULT_QUERY_PATTERN = re.compile(r"^(?:檢查底片|底片)$")
 
     # 帶張數門檻查詢（預設維修師 91，張數 <= N，status=0）
+    # 支援「底片 < 20」、「底片門檻 20」、「底片 20張」、「底片 <= 20」、「底片 < 20張」等
     THRESHOLD_QUERY_PATTERN = re.compile(
-        r"^(?:底片|檢查底片)\s*(?:<|小於|門檻)\s*(\d+)$"
+        r"^(?:底片|檢查底片)\s*(?:(?:<=?|小於|門檻)\s*(\d+)\s*張?|(\d+)\s*張)$"
     )
 
     # 指定維修師查詢（維修師 N，接近底限 status=2）
@@ -62,15 +63,15 @@ class CommandParser:
                 raw_text=cleaned,
             )
 
-        # 3. 帶門檻查詢：「底片 < 20」
+        # 3. 帶門檻查詢：「底片 < 20」、「底片門檻 20」、「底片 20張」
         threshold_match = cls.THRESHOLD_QUERY_PATTERN.match(cleaned)
         if threshold_match:
-            th = int(threshold_match.group(1))
+            threshold_val = int(threshold_match.group(1) or threshold_match.group(2))
             return Command(
                 action="query",
                 uno=DEFAULT_TECHNICIAN_UNO,
                 status=0,
-                threshold=th,
+                threshold=threshold_val,
                 raw_text=cleaned,
             )
 
@@ -90,12 +91,12 @@ class CommandParser:
         comb_match = cls.COMBINED_QUERY_PATTERN.match(cleaned)
         if comb_match:
             uno = int(comb_match.group(1))
-            th = int(comb_match.group(2))
+            threshold = int(comb_match.group(2))
             return Command(
                 action="query",
                 uno=uno,
                 status=0,
-                threshold=th,
+                threshold=threshold,
                 raw_text=cleaned,
             )
 

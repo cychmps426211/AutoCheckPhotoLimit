@@ -104,3 +104,49 @@ def test_fetch_machine_stock_with_mock_session(mocker):
     assert results[1].remaining_sheets == 15
     assert results[2].machine_id == "M3"
     assert results[2].remaining_sheets == 50
+
+
+def test_fetch_machine_stock_with_threshold(mocker):
+    # 測試透過 API 請求並在記憶體中進行門檻過濾與排序
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [
+        {"CodeNo": "M3", "ShopName": "台南店", "Paper": "50"},
+        {"CodeNo": "M1", "ShopName": "台北店", "Paper": "2"},
+        {"CodeNo": "M2", "ShopName": "台中店", "Paper": "15"},
+    ]
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    # 門檻 15：應保留 M1 (2) 與 M2 (15)，排除 M3 (50)
+    results = crawler.fetch_machine_stock(uno=91, status=0, threshold=15)
+
+    assert len(results) == 2
+    assert results[0].machine_id == "M1"
+    assert results[0].remaining_sheets == 2
+    assert results[1].machine_id == "M2"
+    assert results[1].remaining_sheets == 15
+
+
+def test_fetch_machine_stock_threshold_empty(mocker):
+    # 測試門檻過低時回傳空清單 (0 台符合)
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [
+        {"CodeNo": "M3", "ShopName": "台南店", "Paper": "50"},
+        {"CodeNo": "M2", "ShopName": "台中店", "Paper": "15"},
+    ]
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=91, status=0, threshold=5)
+
+    assert results == []

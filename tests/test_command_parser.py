@@ -24,18 +24,63 @@ def test_parse_default_queries():
 
 
 def test_parse_threshold_queries():
-    # 測試「底片 < 20」
+    # 測試「底片 < 20」與「檢查底片 小於 15」
     cmd1 = CommandParser.parse("底片 < 20")
     assert cmd1.action == "query"
     assert cmd1.uno == 91
     assert cmd1.threshold == 20
     assert cmd1.status == 0
 
-    # 測試「檢查底片 小於 15」
     cmd2 = CommandParser.parse("檢查底片 小於 15")
     assert cmd2.action == "query"
     assert cmd2.threshold == 15
     assert cmd2.status == 0
+
+    # 測試「底片門檻 20」、「底片門檻20」
+    cmd3 = CommandParser.parse("底片門檻 20")
+    assert cmd3.action == "query"
+    assert cmd3.threshold == 20
+    assert cmd3.status == 0
+
+    cmd4 = CommandParser.parse("底片門檻20")
+    assert cmd4.action == "query"
+    assert cmd4.threshold == 20
+
+    # 測試「底片 20張」、「底片 20 張」、「底片20張」
+    cmd5 = CommandParser.parse("底片 20張")
+    assert cmd5.action == "query"
+    assert cmd5.threshold == 20
+    assert cmd5.status == 0
+
+    cmd6 = CommandParser.parse("底片 20 張")
+    assert cmd6.action == "query"
+    assert cmd6.threshold == 20
+
+    cmd7 = CommandParser.parse("底片20張")
+    assert cmd7.action == "query"
+    assert cmd7.threshold == 20
+
+    # 測試「檢查底片 30張」、「檢查底片門檻 25」
+    cmd8 = CommandParser.parse("檢查底片 30張")
+    assert cmd8.action == "query"
+    assert cmd8.threshold == 30
+
+    cmd9 = CommandParser.parse("檢查底片門檻 25")
+    assert cmd9.action == "query"
+    assert cmd9.threshold == 25
+
+    # 測試「底片 <= 20」、「底片 < 20張」、「底片門檻 20張」
+    cmd10 = CommandParser.parse("底片 <= 20")
+    assert cmd10.action == "query"
+    assert cmd10.threshold == 20
+
+    cmd11 = CommandParser.parse("底片 < 20張")
+    assert cmd11.action == "query"
+    assert cmd11.threshold == 20
+
+    cmd12 = CommandParser.parse("底片門檻 20張")
+    assert cmd12.action == "query"
+    assert cmd12.threshold == 20
 
 
 def test_parse_technician_queries():

@@ -25,7 +25,7 @@ class MessageBuilder:
     ) -> str:
         if not machines:
             if threshold is not None:
-                return f"🎉 維修師 {uno} 目前無任何機台底片剩餘張數小於等於 {threshold} 張！"
+                return f"🎉 維修師 {uno} 目前負責之機台底片皆充足（無任何機台底片剩餘張數小於等於 {threshold} 張）！"
             return f"🎉 維修師 {uno} 目前所有機台底片存量充足（無接近底限機台）！"
 
         header_suffix = f"（剩餘張數 <= {threshold} 張）" if threshold is not None else "（接近底限）"
@@ -63,7 +63,7 @@ class MessageBuilder:
             "   - 輸入「底片」或「檢查底片」\n"
             "   - 查詢預設維修師 (91) 接近底限之機台\n\n"
             "2. 門檻查詢：\n"
-            "   - 輸入「底片 < 20」或「檢查底片 小於 15」\n"
+            "   - 輸入「底片 < 20」、「底片門檻 20」或「底片 20張」\n"
             "   - 查詢剩餘張數在門檻值以下的機台\n\n"
             "3. 指定維修師查詢：\n"
             "   - 輸入「底片 師 88」或「檢查底片維修師 88」\n\n"
