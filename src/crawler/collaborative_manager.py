@@ -17,6 +17,17 @@ class CollaborativeTechnician:
     machine_ids: Set[str] = field(default_factory=set)
     fallback_names: Dict[str, str] = field(default_factory=dict)
 
+    def matches(self, code_no: str) -> bool:
+        """判斷機台代號是否屬於此協同維修師關注之機台"""
+        return code_no in self.machine_ids
+
+    def resolve_name(self, code_no: str, api_name: str) -> str:
+        """優先使用後台回傳之機台名稱，若為空則回退至設定檔中的中文名稱"""
+        cleaned_api_name = api_name.strip()
+        if cleaned_api_name:
+            return cleaned_api_name
+        return self.fallback_names.get(code_no, "")
+
 
 def load_collaborative_config(
     file_path: Optional[str] = None,

@@ -259,7 +259,7 @@ def test_fetch_machine_stock_collaborative_merged_and_sorted(mocker):
     mock_resp_19.status_code = 200
     mock_resp_19.json.return_value = [
         {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信", "Paper": "5"},
-        {"CodeNo": "OTHER-99", "ShopName": "非支援機台", "Paper": "2"},
+        {"CodeNo": "OTHER-99", "ShopName": "非協同機台", "Paper": "2"},
         {"CodeNo": "ABC079-ST", "ShopName": "寶雅高雄灣內店", "Paper": "22"},
     ]
 
@@ -364,3 +364,84 @@ def test_fetch_machine_stock_collaborative_error_handled_gracefully(mocker):
     assert len(results) == 1
     assert results[0].machine_id == "M91"
     assert results[0].remaining_sheets == 12
+
+
+def test_fetch_machine_stock_collaborative_deduplication(mocker):
+    """驗證當主維修師與協同維修師後台均回傳同一機台代號時，去重僅保留第一筆"""
+    mock_session = mocker.MagicMock()
+
+    mock_resp_91 = mocker.MagicMock()
+    mock_resp_91.status_code = 200
+    mock_resp_91.json.return_value = [
+        {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信(主)", "Paper": "8"},
+    ]
+
+    mock_resp_19 = mocker.MagicMock()
+    mock_resp_19.status_code = 200
+    mock_resp_19.json.return_value = [
+        {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信(協同)", "Paper": "15"},
+    ]
+
+    def mock_post(url, data, **kwargs):
+        user_no = data.get("UserNo")
+        if user_no == 91:
+            return mock_resp_91
+        elif user_no == 19:
+            return mock_resp_19
+        resp = mocker.MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    mock_session.post.side_effect = mock_post
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=91, status=2, include_collaborative=True)
+
+    assert len(results) == 1
+    assert results[0].machine_id == "ABC074-ND"
+    assert results[0].machine_name == "寶雅高雄文信(主)"
+    assert results[0].remaining_sheets == 8
+
+
+def test_fetch_machine_stock_collaborative_guard_non_default_technician(mocker):
+    """驗證非預設維修師（例如 uno=88）即使被傳入 include_collaborative=True，亦不會混入協同機台"""
+    mock_session = mocker.MagicMock()
+
+    mock_resp_88 = mocker.MagicMock()
+    mock_resp_88.status_code = 200
+    mock_resp_88.json.return_value = [
+        {"CodeNo": "M88", "ShopName": "台南安平店", "Paper": "10"},
+    ]
+
+    mock_resp_19 = mocker.MagicMock()
+    mock_resp_19.status_code = 200
+    mock_resp_19.json.return_value = [
+        {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信", "Paper": "3"},
+    ]
+
+    def mock_post(url, data, **kwargs):
+        user_no = data.get("UserNo")
+        if user_no == 88:
+            return mock_resp_88
+        elif user_no == 19:
+            return mock_resp_19
+        resp = mocker.MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    mock_session.post.side_effect = mock_post
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    # uno=88 查詢
+    results = crawler.fetch_machine_stock(uno=88, status=2, include_collaborative=True)
+
+    # 協同機台 uno=19 不應被包含在維修師 88 的查詢結果中
+    assert len(results) == 1
+    assert results[0].machine_id == "M88"
+    assert results[0].remaining_sheets == 10

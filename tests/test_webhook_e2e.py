@@ -503,3 +503,43 @@ def test_webhook_e2e_default_query_includes_collaborative(mocker):
     assert "台南總店 (M91)" in reply_text
 
 
+def test_webhook_e2e_threshold_query_includes_collaborative(mocker):
+    """端對端 Webhook 測試：門檻指令（「底片 < 20」）傳遞 include_collaborative=True，由 Line Reply 回傳合併機台"""
+    mock_machines = [
+        MachineStock(machine_id="ABC079-ST", machine_name="寶雅高雄灣內店", remaining_sheets=7),
+        MachineStock(machine_id="M91_A", machine_name="台南總店", remaining_sheets=15),
+    ]
+    mock_fetch = mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-collab-thresh"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "底片 < 20"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-collab-thresh"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    mock_fetch.assert_called_once_with(
+        uno=91, status=0, threshold=20, include_collaborative=True
+    )
+    assert mock_api.reply_message.called
+    call_args = mock_api.reply_message.call_args[0][0]
+    assert call_args.reply_token == "reply-token-collab-thresh"
+    reply_text = call_args.messages[0].text
+    assert "維修師 91 機台底片存量警報" in reply_text
+    assert "剩餘張數 <= 20 張" in reply_text
+    assert "寶雅高雄灣內店 (ABC079-ST)" in reply_text
+    assert "台南總店 (M91_A)" in reply_text
+
+

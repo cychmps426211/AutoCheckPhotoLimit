@@ -14,7 +14,7 @@ def test_load_default_collaborative_config():
 
     tech19 = technicians[0]
     assert tech19.uno == 19
-    assert tech19.description == "高雄協同支援機台"
+    assert tech19.description == "高雄協同機台"
     assert len(tech19.machine_ids) == 24
 
     # 驗證指定機台代號存在於集合中

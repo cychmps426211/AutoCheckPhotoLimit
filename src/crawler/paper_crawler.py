@@ -76,6 +76,33 @@ class PaperCrawler:
 
         return resp.json()
 
+    @staticmethod
+    def _parse_machine_item(
+        item: dict,
+        threshold: Optional[int] = None,
+        fallback_name: str = "",
+    ) -> Optional[MachineStock]:
+        """解析後台單筆機台資料，並套用張數門檻過濾"""
+        code_no = str(item.get("CodeNo", "")).strip()
+        shop_name = str(item.get("ShopName", "")).strip() or fallback_name
+
+        try:
+            paper_str = str(item.get("Paper", "0")).strip()
+            remaining_sheets = int(paper_str)
+        except ValueError:
+            remaining_sheets = 0
+
+        # 剩餘張數門檻過濾 (Threshold filtering)
+        if threshold is not None and remaining_sheets > threshold:
+            return None
+
+        return MachineStock(
+            machine_id=code_no,
+            machine_name=shop_name,
+            remaining_sheets=remaining_sheets,
+            status_text=str(item.get("SafeQty", "")),
+        )
+
     def fetch_machine_stock(
         self,
         uno: int = DEFAULT_TECHNICIAN_UNO,
@@ -89,7 +116,7 @@ class PaperCrawler:
         - uno: 維修師編號 (預設 91)
         - status: 底片狀態類別 (0=全部, 1=充足, 2=接近底限, 3=低於底限)
         - threshold: 剩餘張數門檻，僅保留 <= threshold 的機台
-        - include_collaborative: 是否一併查詢並合併協同維修師之指定機台
+        - include_collaborative: 是否一併查詢並合併協同維修師之指定機台 (僅限預設維修師)
         """
         session = self.session_manager.get_authenticated_session()
 
@@ -119,29 +146,12 @@ class PaperCrawler:
 
         machines: List[MachineStock] = []
         for item in raw_data:
-            code_no = str(item.get("CodeNo", "")).strip()
-            shop_name = str(item.get("ShopName", "")).strip()
-            try:
-                paper_str = str(item.get("Paper", "0")).strip()
-                remaining_sheets = int(paper_str)
-            except ValueError:
-                remaining_sheets = 0
+            m = self._parse_machine_item(item, threshold=threshold)
+            if m:
+                machines.append(m)
 
-            # 剩餘張數門檻過濾 (Threshold filtering)
-            if threshold is not None and remaining_sheets > threshold:
-                continue
-
-            machines.append(
-                MachineStock(
-                    machine_id=code_no,
-                    machine_name=shop_name,
-                    remaining_sheets=remaining_sheets,
-                    status_text=str(item.get("SafeQty", "")),
-                )
-            )
-
-        # 若啟用協同機台查詢，查詢並合併協同維修師之指定關注機台
-        if include_collaborative:
+        # 若啟用協同機台查詢且為主維修師，查詢並合併協同維修師之指定關注機台
+        if include_collaborative and uno == DEFAULT_TECHNICIAN_UNO:
             collaborative_technicians = load_collaborative_config()
             for collab in collaborative_technicians:
                 try:
@@ -154,30 +164,15 @@ class PaperCrawler:
                     )
                     for item in collab_raw:
                         code_no = str(item.get("CodeNo", "")).strip()
-                        if code_no not in collab.machine_ids:
+                        if not collab.matches(code_no):
                             continue
 
-                        shop_name = (
-                            str(item.get("ShopName", "")).strip()
-                            or collab.fallback_names.get(code_no, "")
+                        fallback = collab.resolve_name(code_no, str(item.get("ShopName", "")))
+                        m = self._parse_machine_item(
+                            item, threshold=threshold, fallback_name=fallback
                         )
-                        try:
-                            paper_str = str(item.get("Paper", "0")).strip()
-                            remaining_sheets = int(paper_str)
-                        except ValueError:
-                            remaining_sheets = 0
-
-                        if threshold is not None and remaining_sheets > threshold:
-                            continue
-
-                        machines.append(
-                            MachineStock(
-                                machine_id=code_no,
-                                machine_name=shop_name,
-                                remaining_sheets=remaining_sheets,
-                                status_text=str(item.get("SafeQty", "")),
-                            )
-                        )
+                        if m:
+                            machines.append(m)
                 except Exception as e:
                     logger.warning(
                         f"查詢協同維修師 {collab.uno} 機台資料失敗: {e}，略過該協同維修師機台。"

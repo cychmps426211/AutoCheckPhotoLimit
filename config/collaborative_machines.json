@@ -2,7 +2,7 @@
   "collaborative_technicians": [
     {
       "uno": 19,
-      "description": "高雄協同支援機台",
+      "description": "高雄協同機台",
       "machines": [
         {"id": "ABC074-ND", "name": "寶雅高雄文信"},
         {"id": "ABC079-ST", "name": "寶雅高雄灣內店"},
