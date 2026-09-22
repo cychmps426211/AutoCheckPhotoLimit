@@ -13,7 +13,7 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 
-from src.config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
+from src.config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, PORT
 from src.auth.circuit_breaker import CircuitBreakerError
 from src.bot.command_parser import CommandParser
 from src.bot.message_builder import MessageBuilder
@@ -46,10 +46,13 @@ def get_messaging_api() -> Optional[MessagingApi]:
 @app.get("/health")
 async def health_check():
     """
-    基礎健康檢查與心跳保活端點
-    供外部 cron (如 cron-job.org / UptimeRobot) 每 10 分鐘呼叫以防雲端主機休眠
+    健康檢查與心跳保活端點
+    供外部 cron (如 cron-job.org / UptimeRobot) 每 10 分鐘呼叫以防雲端主機休眠，
+    並對後台管理系統發送輕量探測以保持 PHPSESSID 活躍（或自動刷新）。
     """
-    return {"status": "ok"}
+    session_status = crawler.session_manager.keep_alive()
+    return {"status": "ok", "session": session_status}
+
 
 
 def process_user_text(user_text: str) -> str:
@@ -150,3 +153,8 @@ async def callback(
                     logger.error(f"發送 Line 回覆訊息失敗: {e}")
 
     return JSONResponse(content={"status": "OK"})
+ 
+ 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("src.main:app", host="0.0.0.0", port=PORT, reload=False)

@@ -205,3 +205,31 @@ class SessionManager:
             logger.info("目前 Session 無效或已過期，觸發自動登入...")
             self.login()
         return self.session
+
+    def keep_alive(self) -> str:
+        """
+        執行心跳保活探測：
+        1. 若熔斷器開啟，回傳 'circuit_breaker_open'，避免外發請求
+        2. 檢查目前 Session 是否有效（輕量探測以保持 PHPSESSID 活躍）
+        3. 若 Session 失效或無快取，自動執行 login() 重新獲取 Session
+        4. 回傳狀態碼 ('active' | 'refreshed' | 'circuit_breaker_open' | 'error')
+        """
+        if self.circuit_breaker.is_open:
+            logger.warning("[KeepAlive] 熔斷保護啟動中，跳過心跳探測")
+            return "circuit_breaker_open"
+
+        try:
+            if self.is_session_valid():
+                logger.info("[KeepAlive] Session 有效，後台心跳探測成功")
+                return "active"
+
+            logger.info("[KeepAlive] Session 無效或已過期，嘗試自動重新登入...")
+            self.login()
+            return "refreshed"
+        except CircuitBreakerError:
+            logger.warning("[KeepAlive] 重新登入觸發熔斷保護")
+            return "circuit_breaker_open"
+        except Exception as e:
+            logger.warning(f"[KeepAlive] 心跳探測或自動登入失敗: {e}")
+            return "error"
+

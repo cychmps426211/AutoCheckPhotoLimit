@@ -1,17 +1,43 @@
 import pytest
 from fastapi.testclient import TestClient
-from src.main import app, process_user_text
+from src.main import app, process_user_text, crawler
 from src.bot.message_builder import MachineStock
 
 
 client = TestClient(app)
 
 
-def test_health_check():
-    """驗證 /health 基礎健康檢查端點 (Acceptance criteria)"""
+def test_health_check(mocker):
+    """驗證 /health 健康檢查與心跳保活端點（會話活躍）"""
+    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="active")
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    assert resp.json() == {"status": "ok", "session": "active"}
+
+
+def test_health_check_session_refreshed(mocker):
+    """驗證 /health 端點在會話過期時帶動自動刷新"""
+    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="refreshed")
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "session": "refreshed"}
+
+
+def test_health_check_circuit_breaker_open(mocker):
+    """驗證 /health 端點在熔斷保護啟動時安全回應"""
+    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="circuit_breaker_open")
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "session": "circuit_breaker_open"}
+
+
+def test_health_check_session_error(mocker):
+    """驗證 /health 端點在連線異常時維持 HTTP 200 回應以防排程誤判中斷"""
+    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="error")
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "session": "error"}
+
 
 
 def test_process_user_text_default_query(mocker):
