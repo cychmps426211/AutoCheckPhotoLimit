@@ -14,6 +14,7 @@ from linebot.v3.messaging import (
 )
 
 from src.config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
+from src.auth.circuit_breaker import CircuitBreakerError
 from src.bot.command_parser import CommandParser
 from src.bot.message_builder import MessageBuilder
 from src.crawler.paper_crawler import PaperCrawler, TechnicianNotFoundError
@@ -52,7 +53,7 @@ async def health_check():
 
 
 def process_user_text(user_text: str) -> str:
-    """處理使用者輸入文字並返回回覆訊息字串"""
+    """處理維修師輸入文字並返回回覆訊息字串"""
     cmd = CommandParser.parse(user_text)
 
     if cmd.action == "help":
@@ -75,6 +76,8 @@ def process_user_text(user_text: str) -> str:
             )
         except TechnicianNotFoundError:
             return MessageBuilder.build_technician_not_found_message(cmd.uno)
+        except CircuitBreakerError:
+            return MessageBuilder.build_circuit_breaker_message()
         except Exception as e:
             logger.error(f"查詢機台資料失敗: {e}")
             return MessageBuilder.build_error_message(str(e))

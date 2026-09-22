@@ -24,7 +24,7 @@ class CommandParser:
     """
 
     # 說明指令
-    HELP_PATTERN = re.compile(r"^(?:底片\s*說明|說明|help)$", re.IGNORECASE)
+    HELP_PATTERN = re.compile(r"^(?:底片\s*(?:說明|教學)|說明|教學|help)$", re.IGNORECASE)
 
     # 基礎查詢（預設維修師 91，接近底限）
     DEFAULT_QUERY_PATTERN = re.compile(r"^(?:檢查底片|底片)$")

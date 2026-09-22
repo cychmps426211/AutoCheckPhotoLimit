@@ -86,7 +86,15 @@ class MessageBuilder:
     def build_unknown_message(cls, raw_text: str) -> str:
         return (
             f"❓ 無法辨識指令：「{raw_text}」\n\n"
-            "您可以直接輸入「底片」查詢預設機台，或輸入「說明」查看所有指令格式。"
+            "您可以直接輸入「底片」查詢預設維修師 (91) 機台，或輸入「說明」查看所有指令格式。"
+        )
+
+    @classmethod
+    def build_circuit_breaker_message(cls) -> str:
+        return (
+            "🚨 【後台連線異常（熔斷保護已啟動）】\n\n"
+            "後台登入已連續失敗達 3 次，系統已自動啟動熔斷保護以維護帳號安全，暫停重複登入重試。\n\n"
+            "💡 請稍候（約 1 分鐘後）再試，或聯絡系統管理員確認後台狀態與帳號密碼。"
         )
 
     @classmethod

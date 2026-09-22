@@ -3,7 +3,7 @@ from typing import List, Optional
 from bs4 import BeautifulSoup
 import requests
 
-from src.auth.session_manager import SessionManager
+from src.auth.session_manager import SessionManager, CircuitBreakerError
 from src.bot.message_builder import MachineStock
 from src.config import SEIWA_BASE_URL, DEFAULT_TECHNICIAN_UNO
 
@@ -87,6 +87,8 @@ class PaperCrawler:
 
         try:
             raw_data = self._post_query(session, uno=uno, status=status, area=area, page_size=1000)
+        except (TechnicianNotFoundError, CircuitBreakerError):
+            raise
         except Exception as e:
             logger.error(f"查詢機台資料失敗: {e}")
             raise RuntimeError(f"無法從後台取得機台資料: {e}")
@@ -101,7 +103,7 @@ class PaperCrawler:
                     existence_data = self._post_query(session, uno=uno, status=0, area=area, page_size=1)
                     if not existence_data:
                         raise TechnicianNotFoundError(uno)
-                except TechnicianNotFoundError:
+                except (TechnicianNotFoundError, CircuitBreakerError):
                     raise
                 except Exception as e:
                     logger.error(f"確認維修師機台總數失敗: {e}")

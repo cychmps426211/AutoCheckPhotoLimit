@@ -204,7 +204,28 @@ def test_parse_combined_queries():
 
 
 def test_parse_help_and_unknown():
+    # 各種說明與教學指令變體
     assert CommandParser.parse("說明").action == "help"
+    assert CommandParser.parse("  說明  ").action == "help"
     assert CommandParser.parse("底片 說明").action == "help"
+    assert CommandParser.parse("底片說明").action == "help"
+    assert CommandParser.parse("底片  說明").action == "help"
+    assert CommandParser.parse("教學").action == "help"
+    assert CommandParser.parse("底片教學").action == "help"
+    assert CommandParser.parse("底片 教學").action == "help"
     assert CommandParser.parse("help").action == "help"
-    assert CommandParser.parse("你好").action == "unknown"
+    assert CommandParser.parse("HELP").action == "help"
+
+    # 未知與無效指令
+    cmd_unk1 = CommandParser.parse("你好")
+    assert cmd_unk1.action == "unknown"
+    assert cmd_unk1.raw_text == "你好"
+
+    cmd_unk2 = CommandParser.parse("天氣如何")
+    assert cmd_unk2.action == "unknown"
+    assert cmd_unk2.raw_text == "天氣如何"
+
+    cmd_unk3 = CommandParser.parse("隨便查查")
+    assert cmd_unk3.action == "unknown"
+    assert cmd_unk3.raw_text == "隨便查查"
+

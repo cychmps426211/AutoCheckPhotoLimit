@@ -6,6 +6,7 @@ import requests
 import ddddocr
 
 from src.config import SEIWA_BASE_URL, SEIWA_ACCOUNT, SEIWA_PASSWORD
+from src.auth.circuit_breaker import CircuitBreaker, CircuitBreakerError
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class SessionManager:
     管理 Seiwa 後台會話與認證狀態。
     - 採用本地開源 ddddocr 離線辨識驗證碼（完全在記憶體 byte stream 執行，不存圖檔）
     - 支援 Session 保持與快取，逾期自動重試登入（最多 3 次）
+    - 整合 CircuitBreaker 熔斷保護機制，防範連續失敗與雪崩
     """
 
     def __init__(
@@ -34,11 +36,13 @@ class SessionManager:
         account: str = SEIWA_ACCOUNT,
         password: str = SEIWA_PASSWORD,
         cache_file: Optional[Path] = SESSION_CACHE_FILE,
+        circuit_breaker: Optional[CircuitBreaker] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.account = account
         self.password = password
         self.cache_file = cache_file
+        self.circuit_breaker = circuit_breaker or CircuitBreaker()
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
         self._ocr: Optional[ddddocr.DdddOcr] = None
@@ -82,6 +86,9 @@ class SessionManager:
         透過請求檢測目前 Session 是否有效。
         若後台回應 302 重定向到 500.html 或 login 頁面，表示會話已失效。
         """
+        if self.circuit_breaker.is_open:
+            return False
+
         phpsessid = self.session.cookies.get("PHPSESSID")
         if not phpsessid:
             return False
@@ -100,11 +107,15 @@ class SessionManager:
     def login(self, max_retries: int = 3) -> bool:
         """
         執行自動登入流程：
-        1. 獲取驗證碼 byte stream
-        2. 調用 ddddocr 本地辨識 4 位碼
-        3. 發送登入請求至 LoginCheck.php
-        4. 失敗則重試（最多 max_retries 次）
+        1. 檢查熔斷器狀態，若開啟則直接中斷 (Fast-Fail)
+        2. 獲取驗證碼 byte stream
+        3. 調用 ddddocr 本地辨識 4 位碼
+        4. 發送登入請求至 LoginCheck.php
+        5. 失敗則重試（最多 max_retries 次）；連續失敗達門檻時觸發熔斷
         """
+        if self.circuit_breaker.is_open:
+            raise CircuitBreakerError("後台登入連續失敗達 3 次，熔斷保護已啟動，暫停連線請求。")
+
         if not self.account or not self.password:
             raise ValueError("未配置 SEIWA_ACCOUNT 或 SEIWA_PASSWORD")
 
@@ -119,6 +130,9 @@ class SessionManager:
                 vcode_resp = self.session.get(vcode_url, timeout=10)
                 if vcode_resp.status_code != 200 or not vcode_resp.content:
                     logger.warning(f"獲取驗證碼失敗 (HTTP {vcode_resp.status_code})")
+                    self.circuit_breaker.record_failure()
+                    if self.circuit_breaker.is_open:
+                        break
                     continue
 
                 # 2. 本地離線 OCR 辨識
@@ -147,29 +161,46 @@ class SessionManager:
 
                 if login_resp.status_code != 200:
                     logger.warning(f"登入請求返回異常代碼: {login_resp.status_code}")
+                    self.circuit_breaker.record_failure()
+                    if self.circuit_breaker.is_open:
+                        break
                     continue
 
                 try:
                     result = login_resp.json()
                 except Exception:
                     logger.warning(f"登入回應非 JSON 格式: {login_resp.text}")
+                    self.circuit_breaker.record_failure()
+                    if self.circuit_breaker.is_open:
+                        break
                     continue
 
                 if result.get("err") == 0:
                     logger.info("Seiwa 後台登入成功！")
                     self._save_cached_session()
+                    self.circuit_breaker.record_success()
                     return True
                 else:
                     err_msg = result.get("msg", "未知錯誤")
                     logger.warning(f"登入失敗 ({err_msg})，準備重試...")
+                    self.circuit_breaker.record_failure()
+                    if self.circuit_breaker.is_open:
+                        break
 
             except Exception as e:
                 logger.warning(f"登入過程中發生異常: {e}")
+                self.circuit_breaker.record_failure()
+                if self.circuit_breaker.is_open:
+                    break
 
+        if self.circuit_breaker.is_open:
+            raise CircuitBreakerError("後台登入連續失敗達 3 次，已啟動熔斷保護。")
         raise RuntimeError(f"登入失敗：已達最大重試次數 ({max_retries})")
 
     def get_authenticated_session(self) -> requests.Session:
         """取得已驗證的 requests.Session 物件（過期則自動登入）"""
+        if self.circuit_breaker.is_open:
+            raise CircuitBreakerError("後台登入連續失敗達 3 次，熔斷保護已啟動，暫停連線請求。")
         if not self.is_session_valid():
             logger.info("目前 Session 無效或已過期，觸發自動登入...")
             self.login()

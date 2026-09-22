@@ -75,6 +75,28 @@ def test_build_technician_not_found_message():
 def test_build_help_message():
     help_msg = MessageBuilder.build_help_message()
     assert "機台底片存量查詢指令說明" in help_msg
+    assert "預設查詢" in help_msg
     assert "底片" in help_msg
+    assert "門檻查詢" in help_msg
+    assert "底片 < 20" in help_msg
+    assert "指定維修師查詢" in help_msg
     assert "底片 師 88" in help_msg
+    assert "複合查詢" in help_msg
     assert "底片 88 < 20" in help_msg
+    assert "教學說明" in help_msg
+    assert "說明" in help_msg
+
+
+def test_build_unknown_message():
+    msg = MessageBuilder.build_unknown_message("未知測試字串")
+    assert "無法辨識指令：「未知測試字串」" in msg
+    assert "輸入「底片」" in msg
+    assert "輸入「說明」" in msg
+
+
+def test_build_circuit_breaker_message():
+    msg = MessageBuilder.build_circuit_breaker_message()
+    assert "熔斷保護已啟動" in msg
+    assert "連續失敗達 3 次" in msg
+    assert "暫停重複登入重試" in msg
+    assert "稍候（約 1 分鐘後）再試" in msg
