@@ -3,26 +3,28 @@ from src.bot.command_parser import CommandParser
 
 
 def test_parse_default_queries():
-    # 測試「底片」
+    # 測試「底片」（預設全部狀態 s=0，門檻 20 張）
     cmd1 = CommandParser.parse("底片")
     assert cmd1.action == "query"
     assert cmd1.uno == 91
-    assert cmd1.status == 2
-    assert cmd1.threshold is None
+    assert cmd1.status == 0
+    assert cmd1.threshold == 20
     assert cmd1.include_collaborative is True
 
     # 測試「檢查底片」
     cmd2 = CommandParser.parse("檢查底片")
     assert cmd2.action == "query"
     assert cmd2.uno == 91
-    assert cmd2.status == 2
-    assert cmd2.threshold is None
+    assert cmd2.status == 0
+    assert cmd2.threshold == 20
     assert cmd2.include_collaborative is True
 
     # 測試前後空白
     cmd3 = CommandParser.parse("  底片  ")
     assert cmd3.action == "query"
     assert cmd3.uno == 91
+    assert cmd3.status == 0
+    assert cmd3.threshold == 20
     assert cmd3.include_collaborative is True
 
 

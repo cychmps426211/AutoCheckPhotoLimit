@@ -5,7 +5,14 @@ import requests
 
 from src.auth.session_manager import SessionManager, CircuitBreakerError
 from src.bot.message_builder import MachineStock
-from src.config import SEIWA_BASE_URL, DEFAULT_TECHNICIAN_UNO
+from src.config import (
+    SEIWA_BASE_URL,
+    DEFAULT_TECHNICIAN_UNO,
+    DEFAULT_QUERY_STATUS,
+    DEFAULT_QUERY_THRESHOLD,
+    EXCLUDED_MACHINE_IDS,
+    EXCLUDED_MACHINE_NAMES,
+)
 from src.crawler.collaborative_manager import load_collaborative_config
 
 logger = logging.getLogger(__name__)
@@ -25,6 +32,7 @@ class PaperCrawler:
     - 支援透過後台 API (PaperMachineGetPage.php) 高效取得結構化資料
     - 支援解析 HTML 表格以相容靜態快照
     - 嚴格落實 CONTEXT.md 之「緊急排序（剩餘張數由少至多）」與「剩餘張數門檻過濾」
+    - 支援過濾異常機台 (如 ABC158-ND 高雄職訓中心)
     """
 
     def __init__(
@@ -39,8 +47,20 @@ class PaperCrawler:
         """委派 SessionManager 執行心跳保活探測"""
         return self.session_manager.keep_alive()
 
-    def _post_query(
+    @staticmethod
+    def _is_excluded_machine(machine_id: str, machine_name: str) -> bool:
+        """判定機台是否為異常排除機台（比對代號與名稱關鍵字）"""
+        m_id = machine_id.strip().upper()
+        if m_id and m_id in EXCLUDED_MACHINE_IDS:
+            return True
 
+        for exc_name in EXCLUDED_MACHINE_NAMES:
+            if exc_name and exc_name in machine_name:
+                return True
+
+        return False
+
+    def _post_query(
         self,
         session: requests.Session,
         uno: int,
@@ -76,15 +96,21 @@ class PaperCrawler:
 
         return resp.json()
 
-    @staticmethod
+    @classmethod
     def _parse_machine_item(
+        cls,
         item: dict,
         threshold: Optional[int] = None,
         fallback_name: str = "",
     ) -> Optional[MachineStock]:
-        """解析後台單筆機台資料，並套用張數門檻過濾"""
+        """解析後台單筆機台資料，過濾異常機台並套用張數門檻過濾"""
         code_no = str(item.get("CodeNo", "")).strip()
         shop_name = str(item.get("ShopName", "")).strip() or fallback_name
+
+        # 異常機台過濾 (Abnormal machine filtering)
+        if cls._is_excluded_machine(code_no, shop_name):
+            logger.info(f"過濾異常機台: {code_no} ({shop_name})")
+            return None
 
         try:
             paper_str = str(item.get("Paper", "0")).strip()
@@ -106,7 +132,7 @@ class PaperCrawler:
     def fetch_machine_stock(
         self,
         uno: int = DEFAULT_TECHNICIAN_UNO,
-        status: int = 2,
+        status: int = DEFAULT_QUERY_STATUS,
         threshold: Optional[int] = None,
         area: int = 0,
         include_collaborative: bool = False,
@@ -191,8 +217,12 @@ class PaperCrawler:
         machines.sort(key=lambda m: m.remaining_sheets)
         return machines
 
-    @staticmethod
-    def parse_html_table(html: str, threshold: Optional[int] = None) -> List[MachineStock]:
+    @classmethod
+    def parse_html_table(
+        cls,
+        html: str,
+        threshold: Optional[int] = None,
+    ) -> List[MachineStock]:
         """
         靜態 HTML 表格解析（提供次級整合測試 seam 驗證）
         """
@@ -218,6 +248,11 @@ class PaperCrawler:
             text_parts = [t.strip() for t in col_id_name.stripped_strings]
             code_no = text_parts[0] if text_parts else ""
             shop_name = text_parts[1] if len(text_parts) > 1 else code_no
+
+            # 異常機台過濾 (Abnormal machine filtering)
+            if cls._is_excluded_machine(code_no, shop_name):
+                logger.info(f"HTML 表格過濾異常機台: {code_no} ({shop_name})")
+                continue
 
             try:
                 remaining_sheets = int(col_paper)

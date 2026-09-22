@@ -20,3 +20,16 @@ COLLABORATIVE_CONFIG_PATH: str = os.getenv(
     "COLLABORATIVE_CONFIG_PATH",
     str(Path(__file__).resolve().parent.parent / "config" / "collaborative_machines.json"),
 )
+
+# 預設查詢設定 (全部狀態 s=0, 剩餘張數門檻 <= 20 張)
+DEFAULT_QUERY_STATUS: int = int(os.getenv("DEFAULT_QUERY_STATUS", "0"))
+DEFAULT_QUERY_THRESHOLD: int = int(os.getenv("DEFAULT_QUERY_THRESHOLD", "20"))
+
+# 異常/排除過濾機台清單 (代號與名稱關鍵字)
+EXCLUDED_MACHINE_IDS: set[str] = set(
+    filter(None, [x.strip().upper() for x in os.getenv("EXCLUDED_MACHINE_IDS", "ABC158-ND").split(",")])
+)
+EXCLUDED_MACHINE_NAMES: set[str] = set(
+    filter(None, [x.strip() for x in os.getenv("EXCLUDED_MACHINE_NAMES", "高雄職訓中心").split(",")])
+)
+

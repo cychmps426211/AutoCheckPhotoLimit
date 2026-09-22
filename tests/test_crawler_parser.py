@@ -445,3 +445,74 @@ def test_fetch_machine_stock_collaborative_guard_non_default_technician(mocker):
     assert len(results) == 1
     assert results[0].machine_id == "M88"
     assert results[0].remaining_sheets == 10
+
+
+def test_parse_machine_item_filters_abnormal_machine():
+    """驗證 _parse_machine_item 正確過濾異常機台 ABC158-ND 與高雄職訓中心"""
+    # 1. 代號符合 ABC158-ND
+    item1 = {"CodeNo": "ABC158-ND", "ShopName": "高雄職訓中心", "Paper": "5"}
+    assert PaperCrawler._parse_machine_item(item1) is None
+
+    # 2. 小寫代號 abc158-nd
+    item2 = {"CodeNo": "abc158-nd", "ShopName": "某展示點", "Paper": "5"}
+    assert PaperCrawler._parse_machine_item(item2) is None
+
+    # 3. 店名包含 高雄職訓中心
+    item3 = {"CodeNo": "XYZ999-AA", "ShopName": "高市職訓中心（高雄職訓中心）", "Paper": "3"}
+    assert PaperCrawler._parse_machine_item(item3) is None
+
+    # 4. 正常機台不受影響
+    item_normal = {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信", "Paper": "15"}
+    m = PaperCrawler._parse_machine_item(item_normal)
+    assert m is not None
+    assert m.machine_id == "ABC074-ND"
+    assert m.remaining_sheets == 15
+
+
+def test_parse_html_table_filters_abnormal_machine():
+    """驗證 parse_html_table 能自 HTML 表格中過濾異常機台 ABC158-ND"""
+    html_with_abnormal = """
+    <table>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>ABC158-ND<br>高雄職訓中心</td>
+                <td>維修師</td>
+                <td>5</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>ABC002<br>台中新時代</td>
+                <td>維修師</td>
+                <td>8</td>
+            </tr>
+        </tbody>
+    </table>
+    """
+    machines = PaperCrawler.parse_html_table(html_with_abnormal)
+    assert len(machines) == 1
+    assert machines[0].machine_id == "ABC002"
+    assert machines[0].remaining_sheets == 8
+
+
+def test_fetch_machine_stock_filters_abnormal_machine(mocker):
+    """驗證 fetch_machine_stock 查詢後台時自動排除異常機台 ABC158-ND"""
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [
+        {"CodeNo": "ABC158-ND", "ShopName": "高雄職訓中心", "Paper": "0"},
+        {"CodeNo": "M1", "ShopName": "台北總店", "Paper": "12"},
+    ]
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=91, status=0, threshold=20)
+
+    assert len(results) == 1
+    assert results[0].machine_id == "M1"
+    assert results[0].remaining_sheets == 12
+

@@ -2,14 +2,18 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from src.config import DEFAULT_TECHNICIAN_UNO
+from src.config import (
+    DEFAULT_TECHNICIAN_UNO,
+    DEFAULT_QUERY_STATUS,
+    DEFAULT_QUERY_THRESHOLD,
+)
 
 
 @dataclass
 class Command:
     action: str  # "query", "help", "unknown"
     uno: int = DEFAULT_TECHNICIAN_UNO
-    status: int = 2  # 2: 接近底限, 0: 全部
+    status: int = DEFAULT_QUERY_STATUS  # 0: 全部, 2: 接近底限
     threshold: Optional[int] = None
     raw_text: str = ""
     include_collaborative: bool = False
@@ -19,7 +23,7 @@ class CommandParser:
     """
     維修師自然語言指令解析器
     支援語法：
-    - 「底片」、「檢查底片」 -> 預設維修師 (91)，接近底限 (status=2)
+    - 「底片」、「檢查底片」 -> 預設維修師 (91)，全部狀態門檻 20 (status=0, threshold=20)
     - 「底片 < 20」 -> 預設維修師 (91)，門檻 20 (status=0)
     - 「說明」、「底片說明」、「底片 說明」、「help」 -> 幫助教學
     """
@@ -27,7 +31,7 @@ class CommandParser:
     # 說明指令
     HELP_PATTERN = re.compile(r"^(?:底片\s*(?:說明|教學)|說明|教學|help)$", re.IGNORECASE)
 
-    # 基礎查詢（預設維修師 91，接近底限）
+    # 預設查詢（預設維修師 91，全部狀態 s=0，門檻 20 張）
     DEFAULT_QUERY_PATTERN = re.compile(r"^(?:檢查底片|底片)$")
 
     # 帶張數門檻查詢（預設維修師 91，張數 <= N，status=0）
@@ -61,8 +65,8 @@ class CommandParser:
             return Command(
                 action="query",
                 uno=DEFAULT_TECHNICIAN_UNO,
-                status=2,
-                threshold=None,
+                status=DEFAULT_QUERY_STATUS,
+                threshold=DEFAULT_QUERY_THRESHOLD,
                 raw_text=cleaned,
                 include_collaborative=True,
             )

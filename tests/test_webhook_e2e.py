@@ -27,10 +27,14 @@ def test_process_user_text_default_query(mocker):
         MachineStock(machine_id="M1", machine_name="台北店", remaining_sheets=3),
         MachineStock(machine_id="M2", machine_name="高雄店", remaining_sheets=12),
     ]
-    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+    mock_fetch = mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
 
     reply = process_user_text("底片")
+    mock_fetch.assert_called_once_with(
+        uno=91, status=0, threshold=20, include_collaborative=True
+    )
     assert "維修師 91 機台底片存量警報" in reply
+    assert "剩餘張數 <= 20 張" in reply
     assert "台北店 (M1)" in reply
     assert "剩餘張數：3 張" in reply
     assert "高雄店 (M2)" in reply
@@ -38,11 +42,12 @@ def test_process_user_text_default_query(mocker):
 
 
 def test_process_user_text_empty_machines(mocker):
-    """驗證機台存量充足時的友善回覆"""
+    """驗證機台存量充足時的友善回覆（預設門檻 20 張）"""
     mocker.patch("src.main.crawler.fetch_machine_stock", return_value=[])
 
     reply = process_user_text("檢查底片")
-    assert "維修師 91 目前所有機台底片存量充足" in reply
+    assert "維修師 91 目前負責之機台底片皆充足" in reply
+    assert "小於等於 20 張" in reply
 
 
 def test_webhook_e2e_line_reply(mocker):
@@ -492,15 +497,63 @@ def test_webhook_e2e_default_query_includes_collaborative(mocker):
     assert resp.status_code == 200
 
     mock_fetch.assert_called_once_with(
-        uno=91, status=2, threshold=None, include_collaborative=True
+        uno=91, status=0, threshold=20, include_collaborative=True
     )
     assert mock_api.reply_message.called
     call_args = mock_api.reply_message.call_args[0][0]
     assert call_args.reply_token == "reply-token-collab"
     reply_text = call_args.messages[0].text
     assert "維修師 91 機台底片存量警報" in reply_text
+    assert "剩餘張數 <= 20 張" in reply_text
     assert "寶雅高雄文信 (ABC074-ND)" in reply_text
     assert "台南總店 (M91)" in reply_text
+
+
+def test_webhook_e2e_filters_abnormal_machine_abc158_nd(mocker):
+    """端對端 Webhook 測試：透過真實爬蟲解析層驗證異常機台 ABC158-ND 自動被過濾且不被 Line 回覆"""
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [
+        {"CodeNo": "ABC158-ND", "ShopName": "高雄職訓中心", "Paper": "2"},
+        {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信", "Paper": "6"},
+    ]
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    from src.crawler.paper_crawler import PaperCrawler
+    test_crawler = PaperCrawler(session_manager=mock_mgr)
+    mocker.patch("src.main.crawler", test_crawler)
+
+    # 模擬協同設定為空清單以專注驗證過濾
+    mocker.patch("src.crawler.paper_crawler.load_collaborative_config", return_value=[])
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-abnormal"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "底片"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-abnormal"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    assert mock_api.reply_message.called
+    reply_text = mock_api.reply_message.call_args[0][0].messages[0].text
+    # 驗證正常機台被包含，異常機台被完全過濾排除
+    assert "寶雅高雄文信 (ABC074-ND)" in reply_text
+    assert "ABC158-ND" not in reply_text
+    assert "高雄職訓中心" not in reply_text
 
 
 def test_webhook_e2e_threshold_query_includes_collaborative(mocker):
