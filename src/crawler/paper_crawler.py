@@ -34,7 +34,12 @@ class PaperCrawler:
         self.session_manager = session_manager or SessionManager()
         self.base_url = base_url.rstrip("/")
 
+    def keep_alive(self) -> str:
+        """委派 SessionManager 執行心跳保活探測"""
+        return self.session_manager.keep_alive()
+
     def _post_query(
+
         self,
         session: requests.Session,
         uno: int,

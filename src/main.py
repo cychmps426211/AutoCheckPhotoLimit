@@ -44,14 +44,16 @@ def get_messaging_api() -> Optional[MessagingApi]:
 
 
 @app.get("/health")
-async def health_check():
+def health_check():
     """
     健康檢查與心跳保活端點
     供外部 cron (如 cron-job.org / UptimeRobot) 每 10 分鐘呼叫以防雲端主機休眠，
     並對後台管理系統發送輕量探測以保持 PHPSESSID 活躍（或自動刷新）。
+    使用同步 def 讓 FastAPI 自動指派至外部線程池執行，避免阻塞主事件迴圈。
     """
-    session_status = crawler.session_manager.keep_alive()
+    session_status = crawler.keep_alive()
     return {"status": "ok", "session": session_status}
+
 
 
 

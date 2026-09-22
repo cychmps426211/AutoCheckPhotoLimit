@@ -7,36 +7,17 @@ from src.bot.message_builder import MachineStock
 client = TestClient(app)
 
 
-def test_health_check(mocker):
-    """驗證 /health 健康檢查與心跳保活端點（會話活躍）"""
-    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="active")
+@pytest.mark.parametrize(
+    "session_status",
+    ["active", "refreshed", "circuit_breaker_open", "error"],
+)
+def test_health_check_various_session_states(mocker, session_status):
+    """驗證 /health 端點在不同會話心跳保活狀態下均維持 HTTP 200 並正確回傳 session 狀態"""
+    mocker.patch.object(crawler, "keep_alive", return_value=session_status)
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "session": "active"}
+    assert resp.json() == {"status": "ok", "session": session_status}
 
-
-def test_health_check_session_refreshed(mocker):
-    """驗證 /health 端點在會話過期時帶動自動刷新"""
-    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="refreshed")
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "session": "refreshed"}
-
-
-def test_health_check_circuit_breaker_open(mocker):
-    """驗證 /health 端點在熔斷保護啟動時安全回應"""
-    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="circuit_breaker_open")
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "session": "circuit_breaker_open"}
-
-
-def test_health_check_session_error(mocker):
-    """驗證 /health 端點在連線異常時維持 HTTP 200 回應以防排程誤判中斷"""
-    mocker.patch.object(crawler.session_manager, "keep_alive", return_value="error")
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "session": "error"}
 
 
 

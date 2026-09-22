@@ -5,7 +5,7 @@ from typing import Optional
 import requests
 import ddddocr
 
-from src.config import SEIWA_BASE_URL, SEIWA_ACCOUNT, SEIWA_PASSWORD
+from src.config import SEIWA_BASE_URL, SEIWA_ACCOUNT, SEIWA_PASSWORD, DEFAULT_TECHNICIAN_UNO
 from src.auth.circuit_breaker import CircuitBreaker, CircuitBreakerError
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ class SessionManager:
         if not phpsessid:
             return False
 
-        test_url = f"{self.base_url}/pc/Paper/PaperMachine.php?area=0&uno=91&s=2"
+        test_url = f"{self.base_url}/pc/Paper/PaperMachine.php?area=0&uno={DEFAULT_TECHNICIAN_UNO}&s=2"
         try:
             resp = self.session.get(test_url, allow_redirects=False, timeout=8)
             # 後台未登入時會回傳 302 Found, location: ../Common/500.html

@@ -5,9 +5,10 @@
 
 **Blocked by:** 01 (Issue #2), 02 (Issue #3), 03 (Issue #4), 04 (Issue #5)
 
-**Status:** ready-for-agent
+**Status:** closed
+ 
+- [x] 提供完整的部署設定檔（如 Procfile）以支援 Render Web Service 啟動
+- [x] `/health` 端點可正常回應健康狀態且帶動 Session 心跳保活
+- [x] 撰寫 README 部署與 cron-job.org 設定指引
+- [x] 驗證部署環境啟動與心跳機制運作正常
 
-- [ ] 提供完整的部署設定檔（如 Procfile）以支援 Render Web Service 啟動
-- [ ] `/health` 端點可正常回應健康狀態且帶動 Session 心跳保活
-- [ ] 撰寫 README 部署與 cron-job.org 設定指引
-- [ ] 驗證部署環境啟動與心跳機制運作正常
