@@ -72,6 +72,28 @@ def main():
     cached_time = time.time() - t3
     print(f"  ✅ 會話複用成功！第二次請求耗時: {cached_time:.3f} 秒 (遠小於初次登入時間 {login_time:.2f} 秒)")
 
+    # 5. 驗證跨維修師與複合查詢 (維修師 92, 門檻 <= 30 張)
+    print(f"\n[步驟 5] 測試跨維修師與複合查詢：查詢維修師 92 剩餘張數 <= 30 張之機台...")
+    t4 = time.time()
+    tech92_machines = crawler.fetch_machine_stock(uno=92, status=0, threshold=30)
+    fetch_time4 = time.time() - t4
+    print(f"  ✅ 查詢完成！耗時: {fetch_time4:.2f} 秒，共找到 {len(tech92_machines)} 台機台")
+    line_msg_92 = MessageBuilder.build_stock_report(uno=92, machines=tech92_machines, threshold=30)
+    print("\n--- Line 回覆訊息預覽 (維修師 92) ---")
+    print(line_msg_92)
+    print("-----------------------------------")
+
+    # 6. 驗證查無機台或無效維修師 (如 uno=88)
+    print(f"\n[步驟 6] 測試無效維修師或名下無機台處理 (維修師 88)...")
+    from src.crawler.paper_crawler import TechnicianNotFoundError
+    try:
+        crawler.fetch_machine_stock(uno=88, status=0)
+        print("  ❌ 未拋出預期的 TechnicianNotFoundError")
+    except TechnicianNotFoundError:
+        not_found_msg = MessageBuilder.build_technician_not_found_message(88)
+        print("  ✅ 成功捕捉 TechnicianNotFoundError！回覆訊息預覽：")
+        print(f"  {not_found_msg}")
+
     print("\n" + "=" * 60)
     print("🎉 所有真實後台驗證項目皆順利通過！")
     print("=" * 60)

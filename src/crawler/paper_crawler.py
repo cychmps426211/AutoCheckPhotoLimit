@@ -10,12 +10,20 @@ from src.config import SEIWA_BASE_URL, DEFAULT_TECHNICIAN_UNO
 logger = logging.getLogger(__name__)
 
 
+class TechnicianNotFoundError(Exception):
+    """查無維修師或維修師名下無任何機台"""
+
+    def __init__(self, uno: int):
+        self.uno = uno
+        super().__init__(f"查無維修師 {uno} 負責之機台資料，請確認維修師編號是否正確。")
+
+
 class PaperCrawler:
     """
     負責爬取並解析 Seiwa 後台機台底片存量資料。
     - 支援透過後台 API (PaperMachineGetPage.php) 高效取得結構化資料
     - 支援解析 HTML 表格以相容靜態快照
-    - 嚴格落實 CONTEXT.md 之「緊急排序（剩餘張數由小到大）」與「剩餘張數門檻過濾」
+    - 嚴格落實 CONTEXT.md 之「緊急排序（剩餘張數由少至多）」與「剩餘張數門檻過濾」
     """
 
     def __init__(
@@ -25,6 +33,42 @@ class PaperCrawler:
     ):
         self.session_manager = session_manager or SessionManager()
         self.base_url = base_url.rstrip("/")
+
+    def _post_query(
+        self,
+        session: requests.Session,
+        uno: int,
+        status: int,
+        area: int,
+        page_size: int = 1000,
+    ) -> list:
+        api_url = f"{self.base_url}/BLL/Paper/PaperMachineGetPage.php"
+        payload = {
+            "PageSize": page_size,
+            "PageNo": 1,
+            "AreaNo": area,
+            "UserNo": uno,
+            "Status": status,
+        }
+        headers = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": f"{self.base_url}/pc/Paper/PaperMachine.php?area={area}&uno={uno}&s={status}",
+        }
+        resp = session.post(api_url, data=payload, headers=headers, timeout=10)
+        is_redirect_or_html = (
+            resp.status_code != 200
+            or (isinstance(resp.text, str) and resp.text.startswith("<!DOCTYPE"))
+        )
+        if is_redirect_or_html:
+            logger.warning("後台會話可能失效，嘗試重新登入後再次查詢...")
+            self.session_manager.login()
+            session = self.session_manager.get_authenticated_session()
+            resp = session.post(api_url, data=payload, headers=headers, timeout=10)
+
+        if resp.status_code != 200:
+            raise RuntimeError(f"後台 API 回應異常，狀態碼: {resp.status_code}")
+
+        return resp.json()
 
     def fetch_machine_stock(
         self,
@@ -39,35 +83,29 @@ class PaperCrawler:
         - status: 底片狀態類別 (0=全部, 1=充足, 2=接近底限, 3=低於底限)
         - threshold: 剩餘張數門檻，僅保留 <= threshold 的機台
         """
-        api_url = f"{self.base_url}/BLL/Paper/PaperMachineGetPage.php"
-        payload = {
-            "PageSize": 1000,
-            "PageNo": 1,
-            "AreaNo": area,
-            "UserNo": uno,
-            "Status": status,
-        }
-        headers = {
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": f"{self.base_url}/pc/Paper/PaperMachine.php?area={area}&uno={uno}&s={status}",
-        }
-
-        # 取得 Session，遇過期自動重新登入
         session = self.session_manager.get_authenticated_session()
 
         try:
-            resp = session.post(api_url, data=payload, headers=headers, timeout=10)
-            # 若重定向或非 200，可能 Session 逾期，嘗試重新登入一次
-            if resp.status_code != 200 or resp.text.startswith("<!DOCTYPE"):
-                logger.warning("後台會話可能失效，嘗試重新登入後再次查詢...")
-                self.session_manager.login()
-                session = self.session_manager.get_authenticated_session()
-                resp = session.post(api_url, data=payload, headers=headers, timeout=10)
-
-            raw_data = resp.json()
+            raw_data = self._post_query(session, uno=uno, status=status, area=area, page_size=1000)
         except Exception as e:
             logger.error(f"查詢機台資料失敗: {e}")
             raise RuntimeError(f"無法從後台取得機台資料: {e}")
+
+        # 若後台回傳為空，判定該維修師名下是否完全無機台（或無效編號）
+        if not raw_data:
+            if status == 0:
+                raise TechnicianNotFoundError(uno)
+            else:
+                # 查詢 status=0 確認是否有名下機台
+                try:
+                    existence_data = self._post_query(session, uno=uno, status=0, area=area, page_size=1)
+                    if not existence_data:
+                        raise TechnicianNotFoundError(uno)
+                except TechnicianNotFoundError:
+                    raise
+                except Exception as e:
+                    logger.error(f"確認維修師機台總數失敗: {e}")
+                    raise RuntimeError(f"無法驗證維修師機台資訊: {e}")
 
         machines: List[MachineStock] = []
         for item in raw_data:

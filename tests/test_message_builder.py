@@ -44,7 +44,37 @@ def test_build_stock_report_with_threshold():
     assert "剩餘張數：18 張" in report
 
 
+def test_build_stock_report_dynamic_uno():
+    """驗證跨維修師查詢時，訊息抬頭動態反映 uno 代號"""
+    machines = [
+        MachineStock(machine_id="TW088", machine_name="高雄夢時代", remaining_sheets=12),
+    ]
+    report = MessageBuilder.build_stock_report(uno=88, machines=machines)
+    assert "維修師 88 機台底片存量警報" in report
+    assert "高雄夢時代 (TW088)" in report
+    assert "剩餘張數：12 張" in report
+
+
+def test_build_stock_report_dynamic_uno_empty():
+    """驗證跨維修師無缺紙機台時之動態 uno 抬頭"""
+    report = MessageBuilder.build_stock_report(uno=88, machines=[])
+    assert "維修師 88 目前所有機台底片存量充足" in report
+
+    report_thresh = MessageBuilder.build_stock_report(uno=88, machines=[], threshold=15)
+    assert "維修師 88 目前負責之機台底片皆充足" in report_thresh
+    assert "小於等於 15 張" in report_thresh
+
+
+def test_build_technician_not_found_message():
+    """驗證查無維修師或無效編號之提示訊息"""
+    msg = MessageBuilder.build_technician_not_found_message(88)
+    assert "查無維修師 88 負責之機台資料" in msg
+    assert "請確認維修師編號是否正確" in msg
+
+
 def test_build_help_message():
     help_msg = MessageBuilder.build_help_message()
     assert "機台底片存量查詢指令說明" in help_msg
     assert "底片" in help_msg
+    assert "底片 師 88" in help_msg
+    assert "底片 88 < 20" in help_msg

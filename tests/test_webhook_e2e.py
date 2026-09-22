@@ -170,3 +170,153 @@ def test_webhook_e2e_threshold_empty(mocker):
     assert len(call_args.messages) == 1
     assert "維修師 91 目前負責之機台底片皆充足" in call_args.messages[0].text
     assert "小於等於 10 張" in call_args.messages[0].text
+
+
+def test_process_user_text_technician_query(mocker):
+    """驗證跨維修師查詢（「底片 師 88」）傳遞 uno=88, status=2, threshold=None"""
+    mock_fetch = mocker.patch(
+        "src.main.crawler.fetch_machine_stock",
+        return_value=[
+            MachineStock(machine_id="M88", machine_name="高雄草衙道", remaining_sheets=9),
+        ],
+    )
+
+    reply = process_user_text("底片 師 88")
+    mock_fetch.assert_called_once_with(uno=88, status=2, threshold=None)
+    assert "維修師 88 機台底片存量警報" in reply
+    assert "高雄草衙道 (M88)" in reply
+    assert "剩餘張數：9 張" in reply
+
+
+def test_process_user_text_combined_query(mocker):
+    """驗證複合查詢（「底片 88 < 20」）傳遞 uno=88, status=0, threshold=20"""
+    mock_fetch = mocker.patch(
+        "src.main.crawler.fetch_machine_stock",
+        return_value=[
+            MachineStock(machine_id="M88", machine_name="高雄草衙道", remaining_sheets=14),
+        ],
+    )
+
+    reply = process_user_text("底片 88 < 20")
+    mock_fetch.assert_called_once_with(uno=88, status=0, threshold=20)
+    assert "維修師 88 機台底片存量警報" in reply
+    assert "剩餘張數 <= 20 張" in reply
+    assert "高雄草衙道 (M88)" in reply
+    assert "剩餘張數：14 張" in reply
+
+
+def test_process_user_text_technician_not_found(mocker):
+    """驗證查無該維修師負責之機台時回傳友善提示"""
+    from src.crawler.paper_crawler import TechnicianNotFoundError
+
+    mocker.patch(
+        "src.main.crawler.fetch_machine_stock",
+        side_effect=TechnicianNotFoundError(88),
+    )
+
+    reply = process_user_text("底片 師 88")
+    assert "查無維修師 88 負責之機台資料" in reply
+    assert "請確認維修師編號是否正確" in reply
+
+
+def test_webhook_e2e_cross_technician_query(mocker):
+    """端對端 Webhook 測試：跨維修師查詢（底片 師 88）成功經由 Line Reply 回傳"""
+    mock_machines = [
+        MachineStock(machine_id="TW88", machine_name="台南三井", remaining_sheets=4),
+    ]
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-cross-tech"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "底片 師 88"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-cross-tech"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    assert mock_api.reply_message.called
+    call_args = mock_api.reply_message.call_args[0][0]
+    assert call_args.reply_token == "reply-token-cross-tech"
+    assert "維修師 88 機台底片存量警報" in call_args.messages[0].text
+    assert "台南三井 (TW88)" in call_args.messages[0].text
+
+
+def test_webhook_e2e_combined_query(mocker):
+    """端對端 Webhook 測試：複合查詢（底片 88門檻 25）成功經由 Line Reply 回傳"""
+    mock_machines = [
+        MachineStock(machine_id="TW88", machine_name="台南三井", remaining_sheets=18),
+    ]
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-comb-query"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "底片 88門檻 25"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-comb-query"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    assert mock_api.reply_message.called
+    call_args = mock_api.reply_message.call_args[0][0]
+    assert call_args.reply_token == "reply-token-comb-query"
+    assert "維修師 88 機台底片存量警報" in call_args.messages[0].text
+    assert "剩餘張數 <= 25 張" in call_args.messages[0].text
+    assert "台南三井 (TW88)" in call_args.messages[0].text
+
+
+def test_webhook_e2e_technician_not_found(mocker):
+    """端對端 Webhook 測試：查無維修師提示成功經由 Line Reply 回傳"""
+    from src.crawler.paper_crawler import TechnicianNotFoundError
+
+    mocker.patch(
+        "src.main.crawler.fetch_machine_stock",
+        side_effect=TechnicianNotFoundError(88),
+    )
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-not-found"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "底片 88 < 20"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-not-found"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    assert mock_api.reply_message.called
+    call_args = mock_api.reply_message.call_args[0][0]
+    assert call_args.reply_token == "reply-token-not-found"
+    assert "查無維修師 88 負責之機台資料" in call_args.messages[0].text
+    assert "請確認維修師編號是否正確" in call_args.messages[0].text
+

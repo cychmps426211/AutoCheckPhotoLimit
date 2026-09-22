@@ -150,3 +150,94 @@ def test_fetch_machine_stock_threshold_empty(mocker):
     results = crawler.fetch_machine_stock(uno=91, status=0, threshold=5)
 
     assert results == []
+
+
+def test_fetch_machine_stock_technician_not_found_status_0(mocker):
+    """驗證 status=0 查無任何機台時拋出 TechnicianNotFoundError"""
+    from src.crawler.paper_crawler import TechnicianNotFoundError
+
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = []
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    with pytest.raises(TechnicianNotFoundError) as exc_info:
+        crawler.fetch_machine_stock(uno=88, status=0)
+
+    assert exc_info.value.uno == 88
+
+
+def test_fetch_machine_stock_technician_not_found_status_2(mocker):
+    """驗證 status=2 且確認 status=0 亦無機台時拋出 TechnicianNotFoundError"""
+    from src.crawler.paper_crawler import TechnicianNotFoundError
+
+    mock_session = mocker.MagicMock()
+    mock_resp_empty = mocker.MagicMock()
+    mock_resp_empty.status_code = 200
+    mock_resp_empty.json.return_value = []
+    mock_session.post.return_value = mock_resp_empty
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    with pytest.raises(TechnicianNotFoundError) as exc_info:
+        crawler.fetch_machine_stock(uno=88, status=2)
+
+    assert exc_info.value.uno == 88
+
+
+def test_fetch_machine_stock_all_sufficient_status_2(mocker):
+    """驗證 status=2 為空但名下有機台 (status=0 有資料) 時回傳空清單（代表皆充足）"""
+    mock_session = mocker.MagicMock()
+    mock_resp_status2 = mocker.MagicMock()
+    mock_resp_status2.status_code = 200
+    mock_resp_status2.text = "[]"
+    mock_resp_status2.json.return_value = []
+
+    mock_resp_status0 = mocker.MagicMock()
+    mock_resp_status0.status_code = 200
+    mock_resp_status0.text = '[{"CodeNo": "M1"}]'
+    mock_resp_status0.json.return_value = [
+        {"CodeNo": "M1", "ShopName": "台北站前店", "Paper": "80"},
+    ]
+
+    # 第一次 post (status=2) 回傳空，第二次 post (status=0) 回傳機台
+    mock_session.post.side_effect = [mock_resp_status2, mock_resp_status0]
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=91, status=2)
+
+    assert results == []
+
+
+def test_fetch_machine_stock_existence_check_failure(mocker):
+    """驗證 status=2 為空且次級查詢異常時不靜默忽略，而是拋出 RuntimeError"""
+    mock_session = mocker.MagicMock()
+    mock_resp_status2 = mocker.MagicMock()
+    mock_resp_status2.status_code = 200
+    mock_resp_status2.text = "[]"
+    mock_resp_status2.json.return_value = []
+
+    mock_resp_fail = mocker.MagicMock()
+    mock_resp_fail.status_code = 500
+    mock_resp_fail.text = "Internal Error"
+
+    mock_session.post.side_effect = [mock_resp_status2, mock_resp_fail]
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    with pytest.raises(RuntimeError) as exc_info:
+        crawler.fetch_machine_stock(uno=91, status=2)
+
+    assert "無法驗證維修師機台資訊" in str(exc_info.value)

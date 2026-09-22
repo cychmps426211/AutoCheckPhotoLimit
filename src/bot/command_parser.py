@@ -36,13 +36,15 @@ class CommandParser:
     )
 
     # 指定維修師查詢（維修師 N，接近底限 status=2）
+    # 支援「底片 師 88」、「底片 師88」、「底片維修師 88」、「檢查底片維修師 88」、「底片 師 88號」等
     TECHNICIAN_QUERY_PATTERN = re.compile(
-        r"^(?:底片|檢查底片)\s*(?:師|維修師)\s*(\d+)$"
+        r"^(?:底片|檢查底片)\s*(?:師|維修師)\s*(\d+)\s*號?$"
     )
 
-    # 混合查詢（維修師 N，張數 <= M，status=0）
+    # 複合查詢（維修師 N，張數 <= M，status=0）
+    # 支援「底片 88 < 20」、「底片 88 <= 20」、「底片 88 小於 20」、「底片 88門檻 20」、「底片 88 20張」、「底片 師 88 < 20」等
     COMBINED_QUERY_PATTERN = re.compile(
-        r"^(?:底片|檢查底片)\s*(\d+)\s*(?:<|小於|門檻)\s*(\d+)$"
+        r"^(?:底片|檢查底片)\s*(?:(?:師|維修師)\s*)?(\d+)\s*號?\s*(?:(?:<=?|小於|門檻)\s*(\d+)\s*張?|\s+(\d+)\s*張)$"
     )
 
     @classmethod
@@ -63,7 +65,7 @@ class CommandParser:
                 raw_text=cleaned,
             )
 
-        # 3. 帶門檻查詢：「底片 < 20」、「底片門檻 20」、「底片 20張」
+        # 3. 預設維修師帶門檻查詢：「底片 < 20」、「底片門檻 20」、「底片 20張」
         threshold_match = cls.THRESHOLD_QUERY_PATTERN.match(cleaned)
         if threshold_match:
             threshold_val = int(threshold_match.group(1) or threshold_match.group(2))
@@ -75,28 +77,28 @@ class CommandParser:
                 raw_text=cleaned,
             )
 
-        # 4. 指定維修師查詢：「底片 師 88」
-        tech_match = cls.TECHNICIAN_QUERY_PATTERN.match(cleaned)
-        if tech_match:
-            uno = int(tech_match.group(1))
-            return Command(
-                action="query",
-                uno=uno,
-                status=2,
-                threshold=None,
-                raw_text=cleaned,
-            )
-
-        # 5. 混合查詢：「底片 88 < 20」
-        comb_match = cls.COMBINED_QUERY_PATTERN.match(cleaned)
-        if comb_match:
-            uno = int(comb_match.group(1))
-            threshold = int(comb_match.group(2))
+        # 4. 複合查詢：「底片 88 < 20」、「底片 88 20張」、「底片 師 88 < 20」
+        combined_match = cls.COMBINED_QUERY_PATTERN.match(cleaned)
+        if combined_match:
+            uno = int(combined_match.group(1))
+            threshold = int(combined_match.group(2) or combined_match.group(3))
             return Command(
                 action="query",
                 uno=uno,
                 status=0,
                 threshold=threshold,
+                raw_text=cleaned,
+            )
+
+        # 5. 指定維修師查詢：「底片 師 88」
+        technician_match = cls.TECHNICIAN_QUERY_PATTERN.match(cleaned)
+        if technician_match:
+            uno = int(technician_match.group(1))
+            return Command(
+                action="query",
+                uno=uno,
+                status=2,
+                threshold=None,
                 raw_text=cleaned,
             )
 
