@@ -6,6 +6,7 @@ import requests
 from src.auth.session_manager import SessionManager, CircuitBreakerError
 from src.bot.message_builder import MachineStock
 from src.config import SEIWA_BASE_URL, DEFAULT_TECHNICIAN_UNO
+from src.crawler.collaborative_manager import load_collaborative_config
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +82,14 @@ class PaperCrawler:
         status: int = 2,
         threshold: Optional[int] = None,
         area: int = 0,
+        include_collaborative: bool = False,
     ) -> List[MachineStock]:
         """
         向後台請求指定維修師與狀態之機台底片存量。
         - uno: 維修師編號 (預設 91)
         - status: 底片狀態類別 (0=全部, 1=充足, 2=接近底限, 3=低於底限)
         - threshold: 剩餘張數門檻，僅保留 <= threshold 的機台
+        - include_collaborative: 是否一併查詢並合併協同維修師之指定機台
         """
         session = self.session_manager.get_authenticated_session()
 
@@ -136,6 +139,58 @@ class PaperCrawler:
                     status_text=str(item.get("SafeQty", "")),
                 )
             )
+
+        # 若啟用協同機台查詢，查詢並合併協同維修師之指定關注機台
+        if include_collaborative:
+            collaborative_technicians = load_collaborative_config()
+            for collab in collaborative_technicians:
+                try:
+                    collab_raw = self._post_query(
+                        session,
+                        uno=collab.uno,
+                        status=status,
+                        area=area,
+                        page_size=1000,
+                    )
+                    for item in collab_raw:
+                        code_no = str(item.get("CodeNo", "")).strip()
+                        if code_no not in collab.machine_ids:
+                            continue
+
+                        shop_name = (
+                            str(item.get("ShopName", "")).strip()
+                            or collab.fallback_names.get(code_no, "")
+                        )
+                        try:
+                            paper_str = str(item.get("Paper", "0")).strip()
+                            remaining_sheets = int(paper_str)
+                        except ValueError:
+                            remaining_sheets = 0
+
+                        if threshold is not None and remaining_sheets > threshold:
+                            continue
+
+                        machines.append(
+                            MachineStock(
+                                machine_id=code_no,
+                                machine_name=shop_name,
+                                remaining_sheets=remaining_sheets,
+                                status_text=str(item.get("SafeQty", "")),
+                            )
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"查詢協同維修師 {collab.uno} 機台資料失敗: {e}，略過該協同維修師機台。"
+                    )
+
+        # 依 machine_id 去重（保留優先加入之主機台資訊）
+        seen_ids = set()
+        unique_machines: List[MachineStock] = []
+        for m in machines:
+            if m.machine_id not in seen_ids:
+                seen_ids.add(m.machine_id)
+                unique_machines.append(m)
+        machines = unique_machines
 
         # 緊急排序 (Urgency Sorting)：依剩餘張數由少至多（升冪）排序
         machines.sort(key=lambda m: m.remaining_sheets)

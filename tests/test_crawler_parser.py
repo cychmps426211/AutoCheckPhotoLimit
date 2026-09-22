@@ -241,3 +241,126 @@ def test_fetch_machine_stock_existence_check_failure(mocker):
         crawler.fetch_machine_stock(uno=91, status=2)
 
     assert "無法驗證維修師機台資訊" in str(exc_info.value)
+
+
+def test_fetch_machine_stock_collaborative_merged_and_sorted(mocker):
+    """驗證 include_collaborative=True 時，合併 uno=91 與 uno=19 目標機台，並過濾非目標機台且緊急排序"""
+    mock_session = mocker.MagicMock()
+
+    # uno=91 回傳 1 台機台 (sheets=18)
+    mock_resp_91 = mocker.MagicMock()
+    mock_resp_91.status_code = 200
+    mock_resp_91.json.return_value = [
+        {"CodeNo": "M91", "ShopName": "台南總店", "Paper": "18"},
+    ]
+
+    # uno=19 回傳 3 台機台：其中 2 台在目標名單內，1 台不在
+    mock_resp_19 = mocker.MagicMock()
+    mock_resp_19.status_code = 200
+    mock_resp_19.json.return_value = [
+        {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信", "Paper": "5"},
+        {"CodeNo": "OTHER-99", "ShopName": "非支援機台", "Paper": "2"},
+        {"CodeNo": "ABC079-ST", "ShopName": "寶雅高雄灣內店", "Paper": "22"},
+    ]
+
+    def mock_post(url, data, **kwargs):
+        user_no = data.get("UserNo")
+        if user_no == 91:
+            return mock_resp_91
+        elif user_no == 19:
+            return mock_resp_19
+        resp = mocker.MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    mock_session.post.side_effect = mock_post
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=91, status=2, include_collaborative=True)
+
+    # 應只包含 M91、ABC074-ND、ABC079-ST，OTHER-99 被濾除
+    assert len(results) == 3
+    assert [m.machine_id for m in results] == ["ABC074-ND", "M91", "ABC079-ST"]
+    assert [m.remaining_sheets for m in results] == [5, 18, 22]
+
+
+def test_fetch_machine_stock_collaborative_threshold(mocker):
+    """驗證門檻過濾 (threshold) 在合併主維修師與協同機台時均生效"""
+    mock_session = mocker.MagicMock()
+
+    mock_resp_91 = mocker.MagicMock()
+    mock_resp_91.status_code = 200
+    mock_resp_91.json.return_value = [
+        {"CodeNo": "M91_A", "ShopName": "台南店A", "Paper": "8"},
+        {"CodeNo": "M91_B", "ShopName": "台南店B", "Paper": "25"},
+    ]
+
+    mock_resp_19 = mocker.MagicMock()
+    mock_resp_19.status_code = 200
+    mock_resp_19.json.return_value = [
+        {"CodeNo": "ABC074-ND", "ShopName": "寶雅高雄文信", "Paper": "6"},
+        {"CodeNo": "ABC079-ST", "ShopName": "寶雅高雄灣內店", "Paper": "15"},
+    ]
+
+    def mock_post(url, data, **kwargs):
+        user_no = data.get("UserNo")
+        if user_no == 91:
+            return mock_resp_91
+        elif user_no == 19:
+            return mock_resp_19
+        resp = mocker.MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    mock_session.post.side_effect = mock_post
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(
+        uno=91, status=0, threshold=10, include_collaborative=True
+    )
+
+    # 門檻 <= 10：保留 ABC074-ND (6) 與 M91_A (8)
+    assert len(results) == 2
+    assert results[0].machine_id == "ABC074-ND"
+    assert results[0].remaining_sheets == 6
+    assert results[1].machine_id == "M91_A"
+    assert results[1].remaining_sheets == 8
+
+
+def test_fetch_machine_stock_collaborative_error_handled_gracefully(mocker):
+    """驗證協同機台後台查詢異常時，不中斷主維修師機台結果"""
+    mock_session = mocker.MagicMock()
+
+    mock_resp_91 = mocker.MagicMock()
+    mock_resp_91.status_code = 200
+    mock_resp_91.json.return_value = [
+        {"CodeNo": "M91", "ShopName": "台南店", "Paper": "12"},
+    ]
+
+    def mock_post(url, data, **kwargs):
+        user_no = data.get("UserNo")
+        if user_no == 91:
+            return mock_resp_91
+        elif user_no == 19:
+            raise RuntimeError("Seiwa API timeout for uno 19")
+        resp = mocker.MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    mock_session.post.side_effect = mock_post
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=91, status=2, include_collaborative=True)
+
+    assert len(results) == 1
+    assert results[0].machine_id == "M91"
+    assert results[0].remaining_sheets == 12

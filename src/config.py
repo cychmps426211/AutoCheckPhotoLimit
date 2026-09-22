@@ -15,3 +15,8 @@ LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN: str = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 
 PORT: int = int(os.getenv("PORT", "8000"))
+
+COLLABORATIVE_CONFIG_PATH: str = os.getenv(
+    "COLLABORATIVE_CONFIG_PATH",
+    str(Path(__file__).resolve().parent.parent / "config" / "collaborative_machines.json"),
+)

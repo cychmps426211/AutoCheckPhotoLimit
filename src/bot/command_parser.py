@@ -12,6 +12,7 @@ class Command:
     status: int = 2  # 2: 接近底限, 0: 全部
     threshold: Optional[int] = None
     raw_text: str = ""
+    include_collaborative: bool = False
 
 
 class CommandParser:
@@ -63,6 +64,7 @@ class CommandParser:
                 status=2,
                 threshold=None,
                 raw_text=cleaned,
+                include_collaborative=True,
             )
 
         # 3. 預設維修師帶門檻查詢：「底片 < 20」、「底片門檻 20」、「底片 20張」
@@ -75,6 +77,7 @@ class CommandParser:
                 status=0,
                 threshold=threshold_val,
                 raw_text=cleaned,
+                include_collaborative=True,
             )
 
         # 4. 複合查詢：「底片 88 < 20」、「底片 88 20張」、「底片 師 88 < 20」

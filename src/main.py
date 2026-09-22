@@ -73,6 +73,7 @@ def process_user_text(user_text: str) -> str:
                 uno=cmd.uno,
                 status=cmd.status,
                 threshold=cmd.threshold,
+                include_collaborative=cmd.include_collaborative,
             )
             return MessageBuilder.build_stock_report(
                 uno=cmd.uno,

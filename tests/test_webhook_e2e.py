@@ -97,7 +97,9 @@ def test_process_user_text_threshold_query(mocker):
     )
 
     reply = process_user_text("底片 20張")
-    mock_fetch.assert_called_once_with(uno=91, status=0, threshold=20)
+    mock_fetch.assert_called_once_with(
+        uno=91, status=0, threshold=20, include_collaborative=True
+    )
     assert "維修師 91 機台底片存量警報" in reply
     assert "剩餘張數 <= 20 張" in reply
     assert "台北店 (M1)" in reply
@@ -111,7 +113,9 @@ def test_process_user_text_threshold_empty(mocker):
     mock_fetch = mocker.patch("src.main.crawler.fetch_machine_stock", return_value=[])
 
     reply = process_user_text("底片門檻 10")
-    mock_fetch.assert_called_once_with(uno=91, status=0, threshold=10)
+    mock_fetch.assert_called_once_with(
+        uno=91, status=0, threshold=10, include_collaborative=True
+    )
     assert "維修師 91 目前負責之機台底片皆充足" in reply
     assert "小於等於 10 張" in reply
 
@@ -189,7 +193,9 @@ def test_process_user_text_technician_query(mocker):
     )
 
     reply = process_user_text("底片 師 88")
-    mock_fetch.assert_called_once_with(uno=88, status=2, threshold=None)
+    mock_fetch.assert_called_once_with(
+        uno=88, status=2, threshold=None, include_collaborative=False
+    )
     assert "維修師 88 機台底片存量警報" in reply
     assert "高雄草衙道 (M88)" in reply
     assert "剩餘張數：9 張" in reply
@@ -205,7 +211,9 @@ def test_process_user_text_combined_query(mocker):
     )
 
     reply = process_user_text("底片 88 < 20")
-    mock_fetch.assert_called_once_with(uno=88, status=0, threshold=20)
+    mock_fetch.assert_called_once_with(
+        uno=88, status=0, threshold=20, include_collaborative=False
+    )
     assert "維修師 88 機台底片存量警報" in reply
     assert "剩餘張數 <= 20 張" in reply
     assert "高雄草衙道 (M88)" in reply
@@ -454,5 +462,44 @@ def test_webhook_e2e_circuit_breaker(mocker):
     assert "熔斷保護已啟動" in call_args.messages[0].text
     assert "連續失敗達 3 次" in call_args.messages[0].text
     assert "暫停重複登入重試" in call_args.messages[0].text
+
+
+def test_webhook_e2e_default_query_includes_collaborative(mocker):
+    """端對端 Webhook 測試：預設「底片」指令傳遞 include_collaborative=True，並由 Line Reply 回傳警報"""
+    mock_machines = [
+        MachineStock(machine_id="ABC074-ND", machine_name="寶雅高雄文信", remaining_sheets=4),
+        MachineStock(machine_id="M91", machine_name="台南總店", remaining_sheets=12),
+    ]
+    mock_fetch = mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-collab"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "底片"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-collab"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    mock_fetch.assert_called_once_with(
+        uno=91, status=2, threshold=None, include_collaborative=True
+    )
+    assert mock_api.reply_message.called
+    call_args = mock_api.reply_message.call_args[0][0]
+    assert call_args.reply_token == "reply-token-collab"
+    reply_text = call_args.messages[0].text
+    assert "維修師 91 機台底片存量警報" in reply_text
+    assert "寶雅高雄文信 (ABC074-ND)" in reply_text
+    assert "台南總店 (M91)" in reply_text
 
 

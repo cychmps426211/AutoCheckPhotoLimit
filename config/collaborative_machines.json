@@ -1,0 +1,34 @@
+{
+  "collaborative_technicians": [
+    {
+      "uno": 19,
+      "description": "高雄協同支援機台",
+      "machines": [
+        {"id": "ABC074-ND", "name": "寶雅高雄文信"},
+        {"id": "ABC079-ST", "name": "寶雅高雄灣內店"},
+        {"id": "ABC097-ND", "name": "捷運高雄巨蛋"},
+        {"id": "ABC152-ND", "name": "萬家福高雄鼎山"},
+        {"id": "ABC161-ND", "name": "萬家福高雄澄清"},
+        {"id": "ABC173-ND", "name": "萬家福鳳山店"},
+        {"id": "ABC175-ND", "name": "高捷中央公園站"},
+        {"id": "ABC185-ND", "name": "高雄醫學院"},
+        {"id": "ABC187-ST", "name": "高捷美麗島站"},
+        {"id": "ABC188-ST", "name": "高捷後驛站"},
+        {"id": "ABC203-ND", "name": "萬家福高雄成功"},
+        {"id": "ABC215-ST", "name": "高捷三多站"},
+        {"id": "ABC247-ST", "name": "寶雅高雄大昌店"},
+        {"id": "ABC322-ND", "name": "寶雅高雄五甲"},
+        {"id": "ABC327-ST", "name": "高捷信義國小站"},
+        {"id": "ABC336-ND", "name": "寶雅鳳山青年"},
+        {"id": "ABC376-ST", "name": "樂家康高雄南屏"},
+        {"id": "ABC383-ST", "name": "寶雅高雄新田"},
+        {"id": "ABC395-ST", "name": "全聯鼓山明誠店"},
+        {"id": "ABC401-ND", "name": "高捷生態園區"},
+        {"id": "ABC404-ST", "name": "前金站"},
+        {"id": "ABC409-ND", "name": "寶雅高雄鳳山"},
+        {"id": "ABC422-ND", "name": "寶雅高雄三多"},
+        {"id": "ABC686-AX", "name": "高捷凱旋站"}
+      ]
+    }
+  ]
+}
