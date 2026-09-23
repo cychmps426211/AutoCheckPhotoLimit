@@ -51,8 +51,6 @@
 
 2. 🔴 小港第二辦公處 (ABC192-ST) [負責維修師: 蘇上豪]
    剩餘張數：6 張
-
-💡 請值班維修師優先巡檢置頂機台補充底片。
 ```
 
 ---
@@ -216,3 +214,5 @@ Render 免費方案在**閒置 15 分鐘後會自動休眠 (Spin-down)**，首�
 - [ADR-0004: 採用獨立設定檔管理跨維修師協同機台與預設查詢合併策略](file:///e:/AutoCheckPhotoLimit/docs/adr/0004-collaborative-machines-configuration.md)
 - [ADR-0005: 預設查詢改為全部狀態門檻20張並過濾異常機台 (ABC158-ND)](file:///e:/AutoCheckPhotoLimit/docs/adr/0005-default-query-threshold-and-abnormal-machine-filter.md)
 - [ADR-0006: 新增南區值班底片殘量查詢模式 (area=46, s=0)](file:///e:/AutoCheckPhotoLimit/docs/adr/0006-on-duty-stock-query-for-south-area.md)
+- [ADR-0007: 新增維修師維護行程查詢功能 (UserMonth.php)](file:///e:/AutoCheckPhotoLimit/docs/adr/0007-maintenance-schedule-query.md)
+- [ADR-0008: 精簡機器人自動回覆訊息格式](file:///e:/AutoCheckPhotoLimit/docs/adr/0008-simplify-bot-reply-messages.md)

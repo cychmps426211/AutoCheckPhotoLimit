@@ -33,7 +33,7 @@ def test_process_user_text_default_query(mocker):
     mock_fetch.assert_called_once_with(
         uno=91, status=0, threshold=20, include_collaborative=True
     )
-    assert "維修師 91 機台底片存量警報" in reply
+    assert "機台底片存量警報" in reply
     assert "剩餘張數 <= 20 張" in reply
     assert "台北店 (M1)" in reply
     assert "剩餘張數：3 張" in reply
@@ -46,7 +46,7 @@ def test_process_user_text_empty_machines(mocker):
     mocker.patch("src.main.crawler.fetch_machine_stock", return_value=[])
 
     reply = process_user_text("檢查底片")
-    assert "維修師 91 目前負責之機台底片皆充足" in reply
+    assert "目前負責之機台底片皆充足" in reply
     assert "小於等於 20 張" in reply
 
 
@@ -105,7 +105,7 @@ def test_process_user_text_threshold_query(mocker):
     mock_fetch.assert_called_once_with(
         uno=91, status=0, threshold=20, include_collaborative=True
     )
-    assert "維修師 91 機台底片存量警報" in reply
+    assert "機台底片存量警報" in reply
     assert "剩餘張數 <= 20 張" in reply
     assert "台北店 (M1)" in reply
     assert "剩餘張數：8 張" in reply
@@ -121,7 +121,7 @@ def test_process_user_text_threshold_empty(mocker):
     mock_fetch.assert_called_once_with(
         uno=91, status=0, threshold=10, include_collaborative=True
     )
-    assert "維修師 91 目前負責之機台底片皆充足" in reply
+    assert "目前負責之機台底片皆充足" in reply
     assert "小於等於 10 張" in reply
 
 
@@ -184,7 +184,7 @@ def test_webhook_e2e_threshold_empty(mocker):
     call_args = mock_api.reply_message.call_args[0][0]
     assert call_args.reply_token == "reply-token-threshold-empty"
     assert len(call_args.messages) == 1
-    assert "維修師 91 目前負責之機台底片皆充足" in call_args.messages[0].text
+    assert "目前負責之機台底片皆充足" in call_args.messages[0].text
     assert "小於等於 10 張" in call_args.messages[0].text
 
 
@@ -201,7 +201,7 @@ def test_process_user_text_technician_query(mocker):
     mock_fetch.assert_called_once_with(
         uno=88, status=2, threshold=None, include_collaborative=False
     )
-    assert "維修師 88 機台底片存量警報" in reply
+    assert "機台底片存量警報" in reply
     assert "高雄草衙道 (M88)" in reply
     assert "剩餘張數：9 張" in reply
 
@@ -219,7 +219,7 @@ def test_process_user_text_combined_query(mocker):
     mock_fetch.assert_called_once_with(
         uno=88, status=0, threshold=20, include_collaborative=False
     )
-    assert "維修師 88 機台底片存量警報" in reply
+    assert "機台底片存量警報" in reply
     assert "剩餘張數 <= 20 張" in reply
     assert "高雄草衙道 (M88)" in reply
     assert "剩餘張數：14 張" in reply
@@ -268,7 +268,7 @@ def test_webhook_e2e_cross_technician_query(mocker):
     assert mock_api.reply_message.called
     call_args = mock_api.reply_message.call_args[0][0]
     assert call_args.reply_token == "reply-token-cross-tech"
-    assert "維修師 88 機台底片存量警報" in call_args.messages[0].text
+    assert "機台底片存量警報" in call_args.messages[0].text
     assert "台南三井 (TW88)" in call_args.messages[0].text
 
 
@@ -301,7 +301,7 @@ def test_webhook_e2e_combined_query(mocker):
     assert mock_api.reply_message.called
     call_args = mock_api.reply_message.call_args[0][0]
     assert call_args.reply_token == "reply-token-comb-query"
-    assert "維修師 88 機台底片存量警報" in call_args.messages[0].text
+    assert "機台底片存量警報" in call_args.messages[0].text
     assert "剩餘張數 <= 25 張" in call_args.messages[0].text
     assert "台南三井 (TW88)" in call_args.messages[0].text
 
@@ -387,7 +387,7 @@ def test_process_user_text_unknown_command():
     """驗證發送無法辨識之輸入時，給予簡要提示並引導輸入「說明」"""
     reply = process_user_text("明天有空嗎")
     assert "無法辨識指令：「明天有空嗎」" in reply
-    assert "您可以直接輸入「底片」查詢預設維修師 (91) 機台，或輸入「說明」查看所有指令格式。" in reply
+    assert "輸入「說明」查看所有指令格式。" in reply
 
 
 def test_webhook_e2e_unknown_command(mocker):
@@ -503,7 +503,7 @@ def test_webhook_e2e_default_query_includes_collaborative(mocker):
     call_args = mock_api.reply_message.call_args[0][0]
     assert call_args.reply_token == "reply-token-collab"
     reply_text = call_args.messages[0].text
-    assert "維修師 91 機台底片存量警報" in reply_text
+    assert "機台底片存量警報" in reply_text
     assert "剩餘張數 <= 20 張" in reply_text
     assert "寶雅高雄文信 (ABC074-ND)" in reply_text
     assert "台南總店 (M91)" in reply_text
@@ -590,7 +590,7 @@ def test_webhook_e2e_threshold_query_includes_collaborative(mocker):
     call_args = mock_api.reply_message.call_args[0][0]
     assert call_args.reply_token == "reply-token-collab-thresh"
     reply_text = call_args.messages[0].text
-    assert "維修師 91 機台底片存量警報" in reply_text
+    assert "機台底片存量警報" in reply_text
     assert "剩餘張數 <= 20 張" in reply_text
     assert "寶雅高雄灣內店 (ABC079-ST)" in reply_text
     assert "台南總店 (M91_A)" in reply_text
@@ -689,7 +689,7 @@ def test_process_user_text_schedule_today(mocker):
     reply = process_user_text("今日行程")
     today = get_taiwan_today()
     mock_fetch.assert_called_once_with(uno=91, target_date=today)
-    assert "維修師 91 維護行程" in reply
+    assert "維護行程" in reply
     assert today.strftime("%Y-%m-%d") in reply
     assert "1. 08:15 ABC061-ST 高雄楠梓監理" in reply
 
@@ -762,7 +762,7 @@ def test_webhook_e2e_schedule_today(mocker):
 
     assert mock_api.reply_message.called
     reply_text = mock_api.reply_message.call_args[0][0].messages[0].text
-    assert "維修師 91 維護行程" in reply_text
+    assert "維護行程" in reply_text
     assert "1. 08:15 ABC061-ST 高雄楠梓監理" in reply_text
 
 

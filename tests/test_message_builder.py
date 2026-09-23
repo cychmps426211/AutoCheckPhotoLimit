@@ -9,7 +9,7 @@ def test_build_stock_report_with_machines():
     ]
 
     report = MessageBuilder.build_stock_report(uno=91, machines=machines)
-    assert "維修師 91 機台底片存量警報" in report
+    assert "機台底片存量警報" in report
     assert "共找到 3 台機台" in report
     assert "台北站前店 (TW001)" in report
     assert "剩餘張數：5 張" in report
@@ -20,12 +20,12 @@ def test_build_stock_report_with_machines():
 
 def test_build_stock_report_empty():
     report = MessageBuilder.build_stock_report(uno=91, machines=[])
-    assert "維修師 91 目前所有機台底片存量充足" in report
+    assert "目前所有機台底片存量充足" in report
 
 
 def test_build_stock_report_empty_with_threshold():
     report = MessageBuilder.build_stock_report(uno=91, machines=[], threshold=20)
-    assert "維修師 91 目前負責之機台底片皆充足" in report
+    assert "目前負責之機台底片皆充足" in report
     assert "小於等於 20 張" in report
 
 
@@ -35,7 +35,7 @@ def test_build_stock_report_with_threshold():
         MachineStock(machine_id="TW002", machine_name="板橋大遠百", remaining_sheets=18),
     ]
     report = MessageBuilder.build_stock_report(uno=91, machines=machines, threshold=20)
-    assert "維修師 91 機台底片存量警報" in report
+    assert "機台底片存量警報" in report
     assert "剩餘張數 <= 20 張" in report
     assert "共找到 2 台機台需要注意" in report
     assert "台北站前店 (TW001)" in report
@@ -45,23 +45,23 @@ def test_build_stock_report_with_threshold():
 
 
 def test_build_stock_report_dynamic_uno():
-    """驗證跨維修師查詢時，訊息抬頭動態反映 uno 代號"""
+    """驗證跨維修師查詢時正常產生存量警報"""
     machines = [
         MachineStock(machine_id="TW088", machine_name="高雄夢時代", remaining_sheets=12),
     ]
     report = MessageBuilder.build_stock_report(uno=88, machines=machines)
-    assert "維修師 88 機台底片存量警報" in report
+    assert "機台底片存量警報" in report
     assert "高雄夢時代 (TW088)" in report
     assert "剩餘張數：12 張" in report
 
 
 def test_build_stock_report_dynamic_uno_empty():
-    """驗證跨維修師無缺紙機台時之動態 uno 抬頭"""
+    """驗證跨維修師無缺紙機台時之充足提示"""
     report = MessageBuilder.build_stock_report(uno=88, machines=[])
-    assert "維修師 88 目前所有機台底片存量充足" in report
+    assert "目前所有機台底片存量充足" in report
 
     report_thresh = MessageBuilder.build_stock_report(uno=88, machines=[], threshold=15)
-    assert "維修師 88 目前負責之機台底片皆充足" in report_thresh
+    assert "目前負責之機台底片皆充足" in report_thresh
     assert "小於等於 15 張" in report_thresh
 
 
@@ -90,7 +90,6 @@ def test_build_help_message():
 def test_build_unknown_message():
     msg = MessageBuilder.build_unknown_message("未知測試字串")
     assert "無法辨識指令：「未知測試字串」" in msg
-    assert "輸入「底片」" in msg
     assert "輸入「說明」" in msg
 
 
@@ -132,7 +131,6 @@ def test_build_duty_stock_report_with_machines():
     assert "台南第一診所 (ABC461-ND) [負責維修師: 蕭睿呈]" in report
     assert "小港第二辦公處 (ABC192-ST) [負責維修師: 蘇上豪]" in report
     assert "鳳山自強站 (ABC099-XX)" in report
-    assert "💡 請值班維修師優先巡檢置頂機台補充底片。" in report
 
 
 def test_build_duty_stock_report_empty():
@@ -167,7 +165,7 @@ def test_build_schedule_report_with_items():
     target_date = datetime.date(2026, 9, 23)
     report = MessageBuilder.build_schedule_report(uno=91, target_date=target_date, items=items)
 
-    assert "維修師 91 維護行程" in report
+    assert "維護行程" in report
     assert "2026-09-23" in report
     assert "共 2 處維護紀錄" in report
     assert "1. 08:15 ABC061-ST 高雄楠梓監理" in report
@@ -179,7 +177,7 @@ def test_build_schedule_report_empty():
     target_date = datetime.date(2026, 9, 24)
     report = MessageBuilder.build_schedule_report(uno=91, target_date=target_date, items=[])
 
-    assert "維修師 91 維護行程" in report
+    assert "維護行程" in report
     assert "2026-09-24" in report
     assert "本日無任何維護行程紀錄" in report
 

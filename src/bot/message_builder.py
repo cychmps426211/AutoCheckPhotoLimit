@@ -26,12 +26,12 @@ class MessageBuilder:
     ) -> str:
         if not machines:
             if threshold is not None:
-                return f"🎉 維修師 {uno} 目前負責之機台底片皆充足（無任何機台底片剩餘張數小於等於 {threshold} 張）！"
-            return f"🎉 維修師 {uno} 目前所有機台底片存量充足（無接近底限機台）！"
+                return f"🎉 目前負責之機台底片皆充足（無任何機台底片剩餘張數小於等於 {threshold} 張）！"
+            return f"🎉 目前所有機台底片存量充足（無接近底限機台）！"
 
         header_suffix = f"（剩餘張數 <= {threshold} 張）" if threshold is not None else "（接近底限）"
         lines = [
-            f"⚠️ 【維修師 {uno} 機台底片存量警報】{header_suffix}",
+            f"⚠️ 【機台底片存量警報】{header_suffix}",
             f"共找到 {len(machines)} 台機台需要注意（已依緊急程度由少至多排序）：",
             "",
         ]
@@ -53,7 +53,6 @@ class MessageBuilder:
             lines.append(f"   剩餘張數：{m.remaining_sheets} 張")
             lines.append("")
 
-        lines.append("💡 請現場維修師優先巡檢置頂機台補充底片。")
         return "\n".join(lines).strip()
 
     @classmethod
@@ -93,7 +92,6 @@ class MessageBuilder:
             lines.append(f"   剩餘張數：{m.remaining_sheets} 張")
             lines.append("")
 
-        lines.append("💡 請值班維修師優先巡檢置頂機台補充底片。")
         return "\n".join(lines).strip()
 
     @classmethod
@@ -106,12 +104,12 @@ class MessageBuilder:
         date_str = target_date.strftime("%Y-%m-%d")
         if not items:
             return (
-                f"📅 【維修師 {uno} 維護行程】{date_str}\n"
+                f"📅 【維護行程】{date_str}\n"
                 f"本日無任何維護行程紀錄。"
             )
 
         lines = [
-            f"📅 【維修師 {uno} 維護行程】{date_str}",
+            f"📅 【維護行程】{date_str}",
             f"共 {len(items)} 處維護紀錄（按時間順序）：",
             "",
         ]
@@ -172,7 +170,7 @@ class MessageBuilder:
     def build_unknown_message(cls, raw_text: str) -> str:
         return (
             f"❓ 無法辨識指令：「{raw_text}」\n\n"
-            "您可以直接輸入「底片」查詢預設維修師 (91) 機台，或輸入「說明」查看所有指令格式。"
+            "輸入「說明」查看所有指令格式。"
         )
 
     @classmethod
