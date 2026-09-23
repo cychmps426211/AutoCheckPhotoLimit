@@ -94,6 +94,20 @@ def main():
         print("  ✅ 成功捕捉 TechnicianNotFoundError！回覆訊息預覽：")
         print(f"  {not_found_msg}")
 
+    # 7. 驗證南區值班底片殘量查詢 (area=46, status=0, threshold=20)
+    print(f"\n[步驟 7] 測試南區值班查詢 (area=46, uno=0, threshold=20)...")
+    from src.config import DUTY_AREA_NO, DUTY_AREA_NAME
+    t5 = time.time()
+    duty_machines = crawler.fetch_machine_stock(uno=0, area=DUTY_AREA_NO, status=0, threshold=20)
+    fetch_time5 = time.time() - t5
+    print(f"  ✅ 查詢完成！耗時: {fetch_time5:.2f} 秒，共找到 {len(duty_machines)} 台機台 (已過濾 ABC158-ND)")
+    duty_msg = MessageBuilder.build_duty_stock_report(
+        area_name=DUTY_AREA_NAME, machines=duty_machines, threshold=20
+    )
+    print("\n--- Line 回覆訊息預覽 (南區值班) ---")
+    print(duty_msg)
+    print("-----------------------------------")
+
     print("\n" + "=" * 60)
     print("🎉 所有真實後台驗證項目皆順利通過！")
     print("=" * 60)

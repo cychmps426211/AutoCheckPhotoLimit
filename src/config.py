@@ -33,3 +33,7 @@ EXCLUDED_MACHINE_NAMES: set[str] = set(
     filter(None, [x.strip() for x in os.getenv("EXCLUDED_MACHINE_NAMES", "高雄職訓中心").split(",")])
 )
 
+# 值班查詢設定 (預設責任區域: 南區 area=46)
+DUTY_AREA_NO: int = int(os.getenv("DUTY_AREA_NO", "46"))
+DUTY_AREA_NAME: str = os.getenv("DUTY_AREA_NAME", "南區")
+

@@ -76,9 +76,10 @@ class PaperCrawler:
             "UserNo": uno,
             "Status": status,
         }
+        referer_query = f"area={area}&s={status}" if uno == 0 else f"area={area}&uno={uno}&s={status}"
         headers = {
             "X-Requested-With": "XMLHttpRequest",
-            "Referer": f"{self.base_url}/pc/Paper/PaperMachine.php?area={area}&uno={uno}&s={status}",
+            "Referer": f"{self.base_url}/pc/Paper/PaperMachine.php?{referer_query}",
         }
         resp = session.post(api_url, data=payload, headers=headers, timeout=10)
         is_redirect_or_html = (
@@ -122,11 +123,14 @@ class PaperCrawler:
         if threshold is not None and remaining_sheets > threshold:
             return None
 
+        in_charge = str(item.get("InCharge", "")).strip()
+
         return MachineStock(
             machine_id=code_no,
             machine_name=shop_name,
             remaining_sheets=remaining_sheets,
             status_text=str(item.get("SafeQty", "")),
+            in_charge=in_charge,
         )
 
     def fetch_machine_stock(
@@ -138,10 +142,11 @@ class PaperCrawler:
         include_collaborative: bool = False,
     ) -> List[MachineStock]:
         """
-        向後台請求指定維修師與狀態之機台底片存量。
-        - uno: 維修師編號 (預設 91)
+        向後台請求指定維修師或指定區域之機台底片存量。
+        - uno: 維修師編號 (預設 91；若為 0 則代表全區值班查詢)
         - status: 底片狀態類別 (0=全部, 1=充足, 2=接近底限, 3=低於底限)
         - threshold: 剩餘張數門檻，僅保留 <= threshold 的機台
+        - area: 責任區域代號 (如 46 代表南區)
         - include_collaborative: 是否一併查詢並合併協同維修師之指定機台 (僅限預設維修師)
         """
         session = self.session_manager.get_authenticated_session()
@@ -154,8 +159,10 @@ class PaperCrawler:
             logger.error(f"查詢機台資料失敗: {e}")
             raise RuntimeError(f"無法從後台取得機台資料: {e}")
 
-        # 若後台回傳為空，判定該維修師名下是否完全無機台（或無效編號）
+        # 若後台回傳為空
         if not raw_data:
+            if uno == 0:
+                return []
             if status == 0:
                 raise TechnicianNotFoundError(uno)
             else:

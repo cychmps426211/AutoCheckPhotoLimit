@@ -1,6 +1,6 @@
 # AutoCheckPhotoLimit Line 機器人
 
-[![Tests](https://img.shields.io/badge/tests-61%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-87%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)]()
 [![Free Tier](https://img.shields.io/badge/cost-100%25%20free-success.svg)]()
@@ -33,8 +33,9 @@
 
 | 指令類別 | 指令範例 | 說明 |
 | :--- | :--- | :--- |
-| **預設查詢** | `底片` 或 `檢查底片` | 查詢預設維修師 (91) 及協同機台（如維修師 19 之高雄指定機台）目前底片狀態為「接近底限」的所有機台，依剩餘張數由少至多排序 |
+| **預設查詢** | `底片` 或 `檢查底片` | 查詢預設維修師 (91) 及協同機台（如維修師 19 之高雄指定機台）全部狀態（s=0）剩餘張數 <= 20 張的機台，依剩餘張數由少至多排序 |
 | **張數門檻過濾** | `底片 < 20`<br>`底片 小於 30`<br>`檢查底片 門檻 50` | 查詢預設維修師 (91) 及協同機台剩餘張數小於等於指定門檻的機台（不限後台狀態分類） |
+| **值班底片殘量查詢** | `值班`<br>`值班底片`<br>`值班底片殘量`<br>`值班 < 30` | 查詢南區 (`area=46`) 全區值班負責機台（預設門檻 20 張，亦支援自訂門檻），自動標註各機台責任維修師，並依緊急程度由少至多排序 |
 | **跨維修師查詢** | `底片 師 92`<br>`底片維修師 88`<br>`檢查底片 師 88` | 查詢指定編號維修師名下「接近底限」的機台，便於同事間代班或跨組支援 |
 | **複合查詢** | `底片 92 < 30`<br>`底片 88 小於 20`<br>`底片 92 門檻 15` | 指定維修師編號並自訂剩餘張數門檻，精確篩選特定同事需補充底片的機台 |
 | **指令教學說明** | `說明`、`底片 說明`、`教學`、`help` | 顯示完整指令清單、語法規範與實際範例 |
@@ -42,14 +43,16 @@
 ### 回覆訊息範例
 
 ```text
-📋 維修師 91 機台底片存量警報（門檻 <= 20 張，共 3 台）：
+⚠️ 【南區值班 機台底片存量警報】（剩餘張數 <= 20 張）
+共找到 2 台機台需要注意（已依緊急程度由少至多排序）：
 
-1. 台北站前店 (TW-001)
-   剩餘張數：3 張
-2. 台中一中店 (TW-042)
-   剩餘張數：8 張
-3. 高雄新堀江 (TW-105)
-   剩餘張數：15 張
+1. 🔴 台南第一診所 (ABC461-ND) [負責維修師: 蕭睿呈]
+   剩餘張數：0 張
+
+2. 🔴 小港第二辦公處 (ABC192-ST) [負責維修師: 蘇上豪]
+   剩餘張數：6 張
+
+💡 請值班維修師優先巡檢置頂機台補充底片。
 ```
 
 ---
@@ -66,6 +69,8 @@
 | `SEIWA_ACCOUNT` | **必要** | 無 | Seiwa 後台登入帳號 |
 | `SEIWA_PASSWORD` | **必要** | 無 | Seiwa 後台登入密碼 |
 | `DEFAULT_TECHNICIAN_UNO` | 選填 | `91` | 未指定維修師時之預設維修師編號 |
+| `DUTY_AREA_NO` | 選填 | `46` | 值班查詢之預設責任區域編號（預設 46 南區） |
+| `DUTY_AREA_NAME` | 選填 | `南區` | 值班查詢之責任區域名稱 |
 | `COLLABORATIVE_CONFIG_PATH` | 選填 | `config/collaborative_machines.json` | 跨維修師協同機台清單設定檔路徑 |
 | `LINE_CHANNEL_SECRET` | **必要** | 無 | Line Developers Messaging API Channel Secret |
 | `LINE_CHANNEL_ACCESS_TOKEN` | **必要** | 無 | Line Developers Messaging API Channel Access Token |
@@ -204,3 +209,6 @@ Render 免費方案在**閒置 15 分鐘後會自動休眠 (Spin-down)**，首�
 - [ADR-0001: 離線 OCR 驗證碼辨識與連線會話保持](file:///e:/AutoCheckPhotoLimit/docs/adr/0001-captcha-ocr-and-session-retention.md)
 - [ADR-0002: 嚴格透過 Line 被動回覆令牌 (replyToken) 回傳訊息](file:///e:/AutoCheckPhotoLimit/docs/adr/0002-line-reply-token-only.md)
 - [ADR-0003: 託管於 Render 免費方案並結合外部定期心跳 (Keep-Alive)](file:///e:/AutoCheckPhotoLimit/docs/adr/0003-free-hosting-with-external-keepalive.md)
+- [ADR-0004: 採用獨立設定檔管理跨維修師協同機台與預設查詢合併策略](file:///e:/AutoCheckPhotoLimit/docs/adr/0004-collaborative-machines-configuration.md)
+- [ADR-0005: 預設查詢改為全部狀態門檻20張並過濾異常機台 (ABC158-ND)](file:///e:/AutoCheckPhotoLimit/docs/adr/0005-default-query-threshold-and-abnormal-machine-filter.md)
+- [ADR-0006: 新增南區值班底片殘量查詢模式 (area=46, s=0)](file:///e:/AutoCheckPhotoLimit/docs/adr/0006-on-duty-stock-query-for-south-area.md)

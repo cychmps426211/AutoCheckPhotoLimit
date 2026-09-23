@@ -100,3 +100,56 @@ def test_build_circuit_breaker_message():
     assert "連續失敗達 3 次" in msg
     assert "暫停重複登入重試" in msg
     assert "稍候（約 1 分鐘後）再試" in msg
+
+
+def test_build_duty_stock_report_with_machines():
+    machines = [
+        MachineStock(
+            machine_id="ABC461-ND",
+            machine_name="台南第一診所",
+            remaining_sheets=0,
+            in_charge="蕭睿呈",
+        ),
+        MachineStock(
+            machine_id="ABC192-ST",
+            machine_name="小港第二辦公處",
+            remaining_sheets=6,
+            in_charge="蘇上豪",
+        ),
+        MachineStock(
+            machine_id="ABC099-XX",
+            machine_name="鳳山自強站",
+            remaining_sheets=15,
+        ),
+    ]
+
+    report = MessageBuilder.build_duty_stock_report(
+        area_name="南區", machines=machines, threshold=20
+    )
+    assert "南區值班 機台底片存量警報" in report
+    assert "剩餘張數 <= 20 張" in report
+    assert "共找到 3 台機台需要注意" in report
+    assert "台南第一診所 (ABC461-ND) [負責維修師: 蕭睿呈]" in report
+    assert "小港第二辦公處 (ABC192-ST) [負責維修師: 蘇上豪]" in report
+    assert "鳳山自強站 (ABC099-XX)" in report
+    assert "💡 請值班維修師優先巡檢置頂機台補充底片。" in report
+
+
+def test_build_duty_stock_report_empty():
+    report = MessageBuilder.build_duty_stock_report(
+        area_name="南區", machines=[], threshold=20
+    )
+    assert "南區值班 目前負責機台底片皆充足" in report
+    assert "小於等於 20 張" in report
+
+    report_no_thresh = MessageBuilder.build_duty_stock_report(
+        area_name="南區", machines=[]
+    )
+    assert "南區值班 目前所有機台底片存量充足" in report_no_thresh
+
+
+def test_build_help_message_includes_duty():
+    help_msg = MessageBuilder.build_help_message()
+    assert "值班" in help_msg
+    assert "值班底片" in help_msg
+    assert "南區" in help_msg

@@ -8,6 +8,7 @@ class MachineStock:
     machine_name: str
     remaining_sheets: int
     status_text: str = ""
+    in_charge: str = ""
 
 
 class MessageBuilder:
@@ -56,6 +57,46 @@ class MessageBuilder:
         return "\n".join(lines).strip()
 
     @classmethod
+    def build_duty_stock_report(
+        cls,
+        area_name: str,
+        machines: List[MachineStock],
+        threshold: Optional[int] = None,
+    ) -> str:
+        if not machines:
+            if threshold is not None:
+                return f"🎉 {area_name}值班 目前負責機台底片皆充足（無任何機台底片剩餘張數小於等於 {threshold} 張）！"
+            return f"🎉 {area_name}值班 目前所有機台底片存量充足（無接近底限機台）！"
+
+        header_suffix = f"（剩餘張數 <= {threshold} 張）" if threshold is not None else "（全部狀態）"
+        lines = [
+            f"⚠️ 【{area_name}值班 機台底片存量警報】{header_suffix}",
+            f"共找到 {len(machines)} 台機台需要注意（已依緊急程度由少至多排序）：",
+            "",
+        ]
+
+        for idx, m in enumerate(machines, start=1):
+            if m.remaining_sheets <= 10:
+                icon = "🔴"
+            elif m.remaining_sheets <= 30:
+                icon = "🟠"
+            else:
+                icon = "🟡"
+
+            # 顯示機台名稱與代號
+            name_display = m.machine_name if m.machine_name else m.machine_id
+            if m.machine_name and m.machine_id and m.machine_name != m.machine_id:
+                name_display = f"{m.machine_name} ({m.machine_id})"
+
+            in_charge_info = f" [負責維修師: {m.in_charge}]" if m.in_charge else ""
+            lines.append(f"{idx}. {icon} {name_display}{in_charge_info}")
+            lines.append(f"   剩餘張數：{m.remaining_sheets} 張")
+            lines.append("")
+
+        lines.append("💡 請值班維修師優先巡檢置頂機台補充底片。")
+        return "\n".join(lines).strip()
+
+    @classmethod
     def build_help_message(cls) -> str:
         return (
             "📖 【機台底片存量查詢指令說明】\n\n"
@@ -71,7 +112,10 @@ class MessageBuilder:
             "4. 複合查詢：\n"
             "   - 輸入「底片 88 < 20」、「底片 88門檻 20」或「底片 88 20張」\n"
             "   - 查詢指定維修師且剩餘張數低於門檻之機台\n\n"
-            "5. 教學說明：\n"
+            "5. 值班查詢：\n"
+            "   - 輸入「值班」、「值班底片」或「值班底片殘量」\n"
+            "   - 查詢南區 (area=46) 剩餘張數 <= 20 張之值班負責機台（支援帶門檻如「值班底片 < 30」）\n\n"
+            "6. 教學說明：\n"
             "   - 輸入「說明」或「底片 說明」"
         )
 

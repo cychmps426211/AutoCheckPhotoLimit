@@ -238,3 +238,47 @@ def test_parse_help_and_unknown():
     assert cmd_unk3.action == "unknown"
     assert cmd_unk3.raw_text == "隨便查查"
 
+
+def test_parse_duty_queries():
+    """驗證預設值班查詢指令解析 (南區 area=46, status=0, threshold=20)"""
+    phrases = [
+        "值班",
+        "值班底片",
+        "值班底片殘量",
+        "值班檢查底片",
+        "檢查值班底片",
+        "  值班底片殘量  ",
+    ]
+    for phrase in phrases:
+        cmd = CommandParser.parse(phrase)
+        assert cmd.action == "duty_query", f"Failed for '{phrase}'"
+        assert cmd.uno == 0
+        assert cmd.area == 46
+        assert cmd.status == 0
+        assert cmd.threshold == 20
+
+
+def test_parse_duty_threshold_queries():
+    """驗證帶門檻值班查詢指令解析"""
+    cases = [
+        ("值班 < 30", 30),
+        ("值班 <= 15", 15),
+        ("值班 小於 25", 25),
+        ("值班 30張", 30),
+        ("值班 30 張", 30),
+        ("值班門檻 18", 18),
+        ("值班底片 < 35", 35),
+        ("值班底片殘量 < 10", 10),
+        ("值班底片殘量 <= 12", 12),
+        ("值班底片殘量 15張", 15),
+        ("值班底片 20張", 20),
+        ("值班檢查底片 < 22", 22),
+    ]
+    for text, expected_threshold in cases:
+        cmd = CommandParser.parse(text)
+        assert cmd.action == "duty_query", f"Failed for '{text}'"
+        assert cmd.uno == 0
+        assert cmd.area == 46
+        assert cmd.status == 0
+        assert cmd.threshold == expected_threshold, f"Threshold mismatch for '{text}'"
+

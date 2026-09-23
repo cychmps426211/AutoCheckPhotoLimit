@@ -516,3 +516,72 @@ def test_fetch_machine_stock_filters_abnormal_machine(mocker):
     assert results[0].machine_id == "M1"
     assert results[0].remaining_sheets == 12
 
+
+def test_parse_machine_item_with_in_charge():
+    """驗證 _parse_machine_item 正確解析 InCharge 負責維修師"""
+    item = {
+        "CodeNo": "ABC461-ND",
+        "ShopName": "台南第一診所",
+        "InCharge": "蕭睿呈",
+        "Paper": "0",
+        "SafeQty": "5",
+    }
+    m = PaperCrawler._parse_machine_item(item)
+    assert m is not None
+    assert m.machine_id == "ABC461-ND"
+    assert m.machine_name == "台南第一診所"
+    assert m.remaining_sheets == 0
+    assert m.in_charge == "蕭睿呈"
+
+
+def test_fetch_machine_stock_duty_area_query(mocker):
+    """驗證 uno=0, area=46 值班全區查詢之 Payload、Referer、異常機台排除與排序"""
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [
+        {"CodeNo": "ABC158-ND", "ShopName": "高雄職訓中心", "InCharge": "蘇上豪", "Paper": "0"},
+        {"CodeNo": "ABC192-ST", "ShopName": "小港第二辦公處", "InCharge": "蘇上豪", "Paper": "6"},
+        {"CodeNo": "ABC461-ND", "ShopName": "台南第一診所", "InCharge": "蕭睿呈", "Paper": "0"},
+        {"CodeNo": "ABC999-OK", "ShopName": "充足機台", "InCharge": "某維修師", "Paper": "150"},
+    ]
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=0, area=46, status=0, threshold=20)
+
+    # 驗證 post 參數
+    call_args = mock_session.post.call_args
+    assert call_args[1]["data"]["AreaNo"] == 46
+    assert call_args[1]["data"]["UserNo"] == 0
+    assert call_args[1]["data"]["Status"] == 0
+    assert "area=46&s=0" in call_args[1]["headers"]["Referer"]
+
+    # 驗證過濾與排序 (ABC158-ND 被排除，150 張被門檻排除，剩下 0 張與 6 張，0 張置頂)
+    assert len(results) == 2
+    assert results[0].machine_id == "ABC461-ND"
+    assert results[0].remaining_sheets == 0
+    assert results[0].in_charge == "蕭睿呈"
+    assert results[1].machine_id == "ABC192-ST"
+    assert results[1].remaining_sheets == 6
+    assert results[1].in_charge == "蘇上豪"
+
+
+def test_fetch_machine_stock_duty_area_empty_result(mocker):
+    """驗證 uno=0 值班全區查詢若後台回傳空清單，直接返回空陣列而不拋出 TechnicianNotFoundError"""
+    mock_session = mocker.MagicMock()
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = []
+    mock_session.post.return_value = mock_resp
+
+    mock_mgr = mocker.MagicMock()
+    mock_mgr.get_authenticated_session.return_value = mock_session
+
+    crawler = PaperCrawler(session_manager=mock_mgr)
+    results = crawler.fetch_machine_stock(uno=0, area=46, status=0, threshold=20)
+    assert results == []
+

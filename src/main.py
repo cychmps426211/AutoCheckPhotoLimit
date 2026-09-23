@@ -13,7 +13,7 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 
-from src.config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, PORT
+from src.config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, PORT, DUTY_AREA_NAME
 from src.auth.circuit_breaker import CircuitBreakerError
 from src.bot.command_parser import CommandParser
 from src.bot.message_builder import MessageBuilder
@@ -66,6 +66,26 @@ def process_user_text(user_text: str) -> str:
 
     if cmd.action == "unknown":
         return MessageBuilder.build_unknown_message(cmd.raw_text)
+
+    if cmd.action == "duty_query":
+        try:
+            machines = crawler.fetch_machine_stock(
+                uno=0,
+                status=cmd.status,
+                threshold=cmd.threshold,
+                area=cmd.area,
+                include_collaborative=False,
+            )
+            return MessageBuilder.build_duty_stock_report(
+                area_name=DUTY_AREA_NAME,
+                machines=machines,
+                threshold=cmd.threshold,
+            )
+        except CircuitBreakerError:
+            return MessageBuilder.build_circuit_breaker_message()
+        except Exception as e:
+            logger.error(f"查詢值班機台資料失敗: {e}")
+            return MessageBuilder.build_error_message(str(e))
 
     if cmd.action == "query":
         try:

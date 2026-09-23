@@ -596,3 +596,83 @@ def test_webhook_e2e_threshold_query_includes_collaborative(mocker):
     assert "台南總店 (M91_A)" in reply_text
 
 
+def test_process_user_text_duty_query(mocker):
+    """驗證維修師發送「值班底片殘量」時，觸發南區 (area=46) 全區查詢 (Acceptance criteria)"""
+    mock_machines = [
+        MachineStock(
+            machine_id="ABC461-ND",
+            machine_name="台南第一診所",
+            remaining_sheets=0,
+            in_charge="蕭睿呈",
+        ),
+        MachineStock(
+            machine_id="ABC192-ST",
+            machine_name="小港第二辦公處",
+            remaining_sheets=6,
+            in_charge="蘇上豪",
+        ),
+    ]
+    mock_fetch = mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+
+    reply = process_user_text("值班底片殘量")
+    mock_fetch.assert_called_once_with(
+        uno=0, status=0, threshold=20, area=46, include_collaborative=False
+    )
+    assert "南區值班 機台底片存量警報" in reply
+    assert "剩餘張數 <= 20 張" in reply
+    assert "台南第一診所 (ABC461-ND) [負責維修師: 蕭睿呈]" in reply
+    assert "剩餘張數：0 張" in reply
+    assert "小港第二辦公處 (ABC192-ST) [負責維修師: 蘇上豪]" in reply
+    assert "剩餘張數：6 張" in reply
+
+
+def test_process_user_text_duty_threshold_query(mocker):
+    """驗證發送帶門檻值班指令（如「值班 < 30」）時，傳遞 threshold=30 與 area=46"""
+    mock_fetch = mocker.patch("src.main.crawler.fetch_machine_stock", return_value=[])
+
+    reply = process_user_text("值班 < 30")
+    mock_fetch.assert_called_once_with(
+        uno=0, status=0, threshold=30, area=46, include_collaborative=False
+    )
+    assert "南區值班 目前負責機台底片皆充足" in reply
+    assert "小於等於 30 張" in reply
+
+
+def test_webhook_e2e_duty_query(mocker):
+    """端對端 Webhook 測試：維修師發送「值班」時，經由 Webhook 驗證並回覆南區值班警報"""
+    mock_machines = [
+        MachineStock(
+            machine_id="ABC461-ND",
+            machine_name="台南第一診所",
+            remaining_sheets=0,
+            in_charge="蕭睿呈",
+        ),
+    ]
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-duty-test"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "值班"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-duty-test"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    assert mock_api.reply_message.called
+    reply_text = mock_api.reply_message.call_args[0][0].messages[0].text
+    assert "南區值班 機台底片存量警報" in reply_text
+    assert "台南第一診所 (ABC461-ND) [負責維修師: 蕭睿呈]" in reply_text
+    assert "剩餘張數：0 張" in reply_text
+
+
