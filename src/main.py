@@ -18,6 +18,7 @@ from src.auth.circuit_breaker import CircuitBreakerError
 from src.bot.command_parser import CommandParser
 from src.bot.message_builder import MessageBuilder
 from src.crawler.paper_crawler import PaperCrawler, TechnicianNotFoundError
+from src.crawler.schedule_crawler import ScheduleCrawler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,12 +28,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="AutoCheckPhotoLimit Line Bot",
-    description="自動查詢與監控後台機台底片存量的 Line 機器人系統",
+    description="自動查詢與監控後台機台底片存量與行程的 Line 機器人系統",
     version="1.0.0",
 )
 
 # 初始化 Line 模組與爬蟲
 crawler = PaperCrawler()
+schedule_crawler = ScheduleCrawler(session_manager=crawler.session_manager)
+
 
 
 def get_messaging_api() -> Optional[MessagingApi]:
@@ -87,6 +90,26 @@ def process_user_text(user_text: str) -> str:
             logger.error(f"查詢值班機台資料失敗: {e}")
             return MessageBuilder.build_error_message(str(e))
 
+    if cmd.action == "schedule_query_invalid":
+        return MessageBuilder.build_invalid_schedule_date_message(cmd.raw_text)
+
+    if cmd.action == "schedule_query":
+        try:
+            items = schedule_crawler.fetch_schedule(
+                uno=cmd.uno,
+                target_date=cmd.target_date,
+            )
+            return MessageBuilder.build_schedule_report(
+                uno=cmd.uno,
+                target_date=cmd.target_date,
+                items=items,
+            )
+        except CircuitBreakerError:
+            return MessageBuilder.build_circuit_breaker_message()
+        except Exception as e:
+            logger.error(f"查詢行程資料失敗: {e}")
+            return MessageBuilder.build_error_message(str(e))
+
     if cmd.action == "query":
         try:
             machines = crawler.fetch_machine_stock(
@@ -109,6 +132,7 @@ def process_user_text(user_text: str) -> str:
             return MessageBuilder.build_error_message(str(e))
 
     return MessageBuilder.build_unknown_message(user_text)
+
 
 
 @app.post("/callback")

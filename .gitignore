@@ -24,3 +24,8 @@ session_cookie.json
 dist/
 build/
 *.egg-info/
+
+# Local scratches & type check cache
+.scratch/
+.mypy_cache/
+

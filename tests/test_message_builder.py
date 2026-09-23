@@ -153,3 +153,40 @@ def test_build_help_message_includes_duty():
     assert "值班" in help_msg
     assert "值班底片" in help_msg
     assert "南區" in help_msg
+    assert "行程" in help_msg
+
+
+def test_build_schedule_report_with_items():
+    import datetime
+    from src.crawler.schedule_crawler import ScheduleItem
+
+    items = [
+        ScheduleItem(order=1, machine_id="ABC061-ST", machine_name="高雄楠梓監理", time_str="08:15"),
+        ScheduleItem(order=2, machine_id="ABC197-ST", machine_name="旗津辦公處", time_str="09:13"),
+    ]
+    target_date = datetime.date(2026, 9, 23)
+    report = MessageBuilder.build_schedule_report(uno=91, target_date=target_date, items=items)
+
+    assert "維修師 91 維護行程" in report
+    assert "2026-09-23" in report
+    assert "共 2 處維護紀錄" in report
+    assert "1. 08:15 ABC061-ST 高雄楠梓監理" in report
+    assert "2. 09:13 ABC197-ST 旗津辦公處" in report
+
+
+def test_build_schedule_report_empty():
+    import datetime
+    target_date = datetime.date(2026, 9, 24)
+    report = MessageBuilder.build_schedule_report(uno=91, target_date=target_date, items=[])
+
+    assert "維修師 91 維護行程" in report
+    assert "2026-09-24" in report
+    assert "本日無任何維護行程紀錄" in report
+
+
+def test_build_invalid_schedule_date_message():
+    msg = MessageBuilder.build_invalid_schedule_date_message("行程 9999")
+    assert "日期格式不正確" in msg
+    assert "行程 9999" in msg
+    assert "行程 0922" in msg
+

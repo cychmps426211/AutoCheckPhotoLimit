@@ -97,6 +97,43 @@ class MessageBuilder:
         return "\n".join(lines).strip()
 
     @classmethod
+    def build_schedule_report(
+        cls,
+        uno: int,
+        target_date,
+        items,
+    ) -> str:
+        date_str = target_date.strftime("%Y-%m-%d")
+        if not items:
+            return (
+                f"📅 【維修師 {uno} 維護行程】{date_str}\n"
+                f"本日無任何維護行程紀錄。"
+            )
+
+        lines = [
+            f"📅 【維修師 {uno} 維護行程】{date_str}",
+            f"共 {len(items)} 處維護紀錄（按時間順序）：",
+            "",
+        ]
+        for item in items:
+            name_part = f" {item.machine_name}" if item.machine_name else ""
+            lines.append(f"{item.order}. {item.time_str} {item.machine_id}{name_part}")
+
+        return "\n".join(lines).strip()
+
+    @classmethod
+    def build_invalid_schedule_date_message(cls, raw_text: str) -> str:
+        return (
+            f"⚠️ 日期格式不正確：「{raw_text}」\n\n"
+            "支援格式範例：\n"
+            "- 今日行程（或直接輸入「行程」）\n"
+            "- 行程 0922（或 行程 9/22）\n"
+            "- 行程 2026-09-22\n"
+            "- 0922行程\n"
+            "- 昨天行程 / 明天行程"
+        )
+
+    @classmethod
     def build_help_message(cls) -> str:
         return (
             "📖 【機台底片存量查詢指令說明】\n\n"
@@ -115,9 +152,14 @@ class MessageBuilder:
             "5. 值班查詢：\n"
             "   - 輸入「值班」、「值班底片」或「值班底片殘量」\n"
             "   - 查詢南區 (area=46) 剩餘張數 <= 20 張之值班負責機台（支援帶門檻如「值班底片 < 30」）\n\n"
-            "6. 教學說明：\n"
+            "6. 行程查詢：\n"
+            "   - 輸入「今日行程」、「今天行程」或「行程」\n"
+            "   - 查詢預設維修師 (91) 今日維護行程（機台代號、名稱、到達時間）\n"
+            "   - 亦可輸入「行程 0922」、「行程 2026-09-22」或「0922行程」查詢指定日期行程\n\n"
+            "7. 教學說明：\n"
             "   - 輸入「說明」或「底片 說明」"
         )
+
 
     @classmethod
     def build_technician_not_found_message(cls, uno: int) -> str:

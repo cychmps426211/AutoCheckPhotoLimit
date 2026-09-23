@@ -282,3 +282,60 @@ def test_parse_duty_threshold_queries():
         assert cmd.status == 0
         assert cmd.threshold == expected_threshold, f"Threshold mismatch for '{text}'"
 
+
+def test_parse_schedule_queries():
+    import datetime
+    from src.crawler.schedule_crawler import get_taiwan_today
+    today = get_taiwan_today()
+
+    # 預設今日行程
+    for phrase in ["今日行程", "今天行程", "行程", "  今日行程  ", "  行程  "]:
+        cmd = CommandParser.parse(phrase)
+        assert cmd.action == "schedule_query", f"Failed for '{phrase}'"
+        assert cmd.target_date == today
+        assert cmd.uno == 91
+
+    # 昨日與明日
+    cmd_yesterday = CommandParser.parse("昨天行程")
+    assert cmd_yesterday.action == "schedule_query"
+    assert cmd_yesterday.target_date == today - datetime.timedelta(days=1)
+
+    cmd_yesterday2 = CommandParser.parse("昨日行程")
+    assert cmd_yesterday2.action == "schedule_query"
+    assert cmd_yesterday2.target_date == today - datetime.timedelta(days=1)
+
+    cmd_tomorrow = CommandParser.parse("明天行程")
+    assert cmd_tomorrow.action == "schedule_query"
+    assert cmd_tomorrow.target_date == today + datetime.timedelta(days=1)
+
+    cmd_tomorrow2 = CommandParser.parse("明日行程")
+    assert cmd_tomorrow2.action == "schedule_query"
+    assert cmd_tomorrow2.target_date == today + datetime.timedelta(days=1)
+
+    # 指定日期
+    curr_year = today.year
+    date_cases = [
+        ("行程 0922", datetime.date(curr_year, 9, 22)),
+        ("行程 922", datetime.date(curr_year, 9, 22)),
+        ("行程 09/22", datetime.date(curr_year, 9, 22)),
+        ("行程 9/22", datetime.date(curr_year, 9, 22)),
+        ("行程 09-22", datetime.date(curr_year, 9, 22)),
+        ("行程 2026-09-22", datetime.date(2026, 9, 22)),
+        ("行程 2026/09/22", datetime.date(2026, 9, 22)),
+        ("行程 20260922", datetime.date(2026, 9, 22)),
+        ("0922行程", datetime.date(curr_year, 9, 22)),
+        ("0922 行程", datetime.date(curr_year, 9, 22)),
+        ("9/22 行程", datetime.date(curr_year, 9, 22)),
+    ]
+    for text, expected_date in date_cases:
+        cmd = CommandParser.parse(text)
+        assert cmd.action == "schedule_query", f"Failed for '{text}'"
+        assert cmd.target_date == expected_date, f"Date mismatch for '{text}'"
+
+    # 無效日期
+    invalid_cases = ["行程 9999", "行程 1345", "行程 0230"]
+    for text in invalid_cases:
+        cmd = CommandParser.parse(text)
+        assert cmd.action == "schedule_query_invalid", f"Expected invalid for '{text}'"
+
+

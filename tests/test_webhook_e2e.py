@@ -676,3 +676,94 @@ def test_webhook_e2e_duty_query(mocker):
     assert "剩餘張數：0 張" in reply_text
 
 
+def test_process_user_text_schedule_today(mocker):
+    """驗證發送「今日行程」時調用 schedule_crawler 查詢台灣今天日期之維護行程"""
+    import datetime
+    from src.crawler.schedule_crawler import ScheduleItem, get_taiwan_today
+
+    mock_items = [
+        ScheduleItem(order=1, machine_id="ABC061-ST", machine_name="高雄楠梓監理", time_str="08:15"),
+    ]
+    mock_fetch = mocker.patch("src.main.schedule_crawler.fetch_schedule", return_value=mock_items)
+
+    reply = process_user_text("今日行程")
+    today = get_taiwan_today()
+    mock_fetch.assert_called_once_with(uno=91, target_date=today)
+    assert "維修師 91 維護行程" in reply
+    assert today.strftime("%Y-%m-%d") in reply
+    assert "1. 08:15 ABC061-ST 高雄楠梓監理" in reply
+
+
+def test_process_user_text_schedule_specific_date(mocker):
+    """驗證發送「行程 0922」時查詢指定日期之維護行程"""
+    import datetime
+    from src.crawler.schedule_crawler import ScheduleItem, get_taiwan_today
+
+    mock_items = [
+        ScheduleItem(order=1, machine_id="ABC197-ST", machine_name="旗津辦公處", time_str="09:13"),
+        ScheduleItem(order=2, machine_id="ABC192-ST", machine_name="旗津第二辦公處", time_str="09:27"),
+    ]
+    mock_fetch = mocker.patch("src.main.schedule_crawler.fetch_schedule", return_value=mock_items)
+
+    reply = process_user_text("行程 0922")
+    curr_year = get_taiwan_today().year
+    target = datetime.date(curr_year, 9, 22)
+    mock_fetch.assert_called_once_with(uno=91, target_date=target)
+    assert f"{curr_year}-09-22" in reply
+    assert "共 2 處維護紀錄" in reply
+    assert "1. 09:13 ABC197-ST 旗津辦公處" in reply
+    assert "2. 09:27 ABC192-ST 旗津第二辦公處" in reply
+
+
+def test_process_user_text_schedule_empty(mocker):
+    """驗證當日無維護行程紀錄時之提示"""
+    import datetime
+    from src.crawler.schedule_crawler import get_taiwan_today
+
+    mocker.patch("src.main.schedule_crawler.fetch_schedule", return_value=[])
+
+    reply = process_user_text("行程")
+    assert "本日無任何維護行程紀錄" in reply
+
+
+def test_process_user_text_schedule_invalid_date():
+    """驗證輸入無效日期時之格式提示"""
+    reply = process_user_text("行程 9999")
+    assert "日期格式不正確" in reply
+    assert "行程 0922" in reply
+
+
+def test_webhook_e2e_schedule_today(mocker):
+    """端對端 Webhook 測試：維修師發送「行程」，完整驗證透過 Line Reply API 回覆行程資訊"""
+    from src.crawler.schedule_crawler import ScheduleItem, get_taiwan_today
+    mock_items = [
+        ScheduleItem(order=1, machine_id="ABC061-ST", machine_name="高雄楠梓監理", time_str="08:15"),
+    ]
+    mocker.patch("src.main.schedule_crawler.fetch_schedule", return_value=mock_items)
+
+    mock_api = mocker.MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+    mocker.patch("src.main.LINE_CHANNEL_SECRET", "mock_secret")
+
+    from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+    mock_event = mocker.MagicMock(spec=MessageEvent)
+    mock_event.reply_token = "reply-token-schedule-test"
+    mock_event.message = mocker.MagicMock(spec=TextMessageContent)
+    mock_event.message.text = "行程"
+
+    mocker.patch("linebot.v3.WebhookParser.parse", return_value=[mock_event])
+
+    headers = {"X-Line-Signature": "valid-signature"}
+    payload = {"events": [{"type": "message", "replyToken": "reply-token-schedule-test"}]}
+
+    resp = client.post("/callback", json=payload, headers=headers)
+    assert resp.status_code == 200
+
+    assert mock_api.reply_message.called
+    reply_text = mock_api.reply_message.call_args[0][0].messages[0].text
+    assert "維修師 91 維護行程" in reply_text
+    assert "1. 08:15 ABC061-ST 高雄楠梓監理" in reply_text
+
+
+

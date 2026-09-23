@@ -1,3 +1,4 @@
+import datetime
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -8,17 +9,19 @@ from src.config import (
     DEFAULT_QUERY_THRESHOLD,
     DUTY_AREA_NO,
 )
+from src.crawler.schedule_crawler import get_taiwan_today
 
 
 @dataclass
 class Command:
-    action: str  # "query", "duty_query", "help", "unknown"
+    action: str  # "query", "duty_query", "schedule_query", "schedule_query_invalid", "help", "unknown"
     uno: int = DEFAULT_TECHNICIAN_UNO
     status: int = DEFAULT_QUERY_STATUS  # 0: 全部, 2: 接近底限
     threshold: Optional[int] = None
     raw_text: str = ""
     include_collaborative: bool = False
     area: int = 0
+    target_date: Optional[datetime.date] = None
 
 
 class CommandParser:
@@ -29,11 +32,26 @@ class CommandParser:
     - 「底片 < 20」 -> 預設維修師 (91)，門檻 20 (status=0)
     - 「值班」、「值班底片」、「值班底片殘量」 -> 南區 (area=46)，全部狀態門檻 20
     - 「值班 < 20」、「值班底片 < 20」 -> 南區 (area=46)，門檻 20
+    - 「今日行程」、「今天行程」、「行程」 -> 當日維護行程
+    - 「行程 0922」、「0922行程」 -> 指定日期維護行程
     - 「說明」、「底片說明」、「底片 說明」、「help」 -> 幫助教學
     """
 
     # 說明指令
     HELP_PATTERN = re.compile(r"^(?:底片\s*(?:說明|教學)|說明|教學|help)$", re.IGNORECASE)
+
+    # 行程預設指令（今日）
+    SCHEDULE_DEFAULT_PATTERN = re.compile(r"^(?:今日行程|今天行程|行程)$")
+
+    # 行程相對日期指令（昨天、昨日、明天、明日）
+    SCHEDULE_RELATIVE_PATTERN = re.compile(r"^(昨天|昨日|明天|明日)行程$")
+
+    # 行程指定日期指令：「行程 0922」、「行程 2026-09-22」
+    SCHEDULE_PREFIX_PATTERN = re.compile(r"^行程\s+(.+)$")
+
+    # 行程後綴指令：「0922行程」、「0922 行程」、「9/22行程」
+    SCHEDULE_SUFFIX_PATTERN = re.compile(r"^(.+?)\s*行程$")
+
 
     # 值班查詢（南區 area=46，全部狀態 s=0，預設門檻 20 張）
     DUTY_QUERY_PATTERN = re.compile(
@@ -67,6 +85,35 @@ class CommandParser:
         r"^(?:底片|檢查底片)\s*(?:(?:師|維修師)\s*)?(\d+)\s*號?\s*(?:(?:<=?|小於|門檻)\s*(\d+)\s*張?|\s+(\d+)\s*張)$"
     )
 
+    @staticmethod
+    def _parse_date_string(date_text: str, current_year: int) -> Optional[datetime.date]:
+        cleaned_date = date_text.strip()
+        # 1. YYYY-MM-DD or YYYY/MM/DD or YYYYMMDD
+        m_full = re.match(r"^(\d{4})[-/]?(\d{1,2})[-/]?(\d{1,2})$", cleaned_date)
+        if m_full:
+            try:
+                return datetime.date(int(m_full.group(1)), int(m_full.group(2)), int(m_full.group(3)))
+            except ValueError:
+                return None
+
+        # 2. MM/DD or MM-DD (e.g. 09/22, 9/22, 09-22)
+        m_slash = re.match(r"^(\d{1,2})[-/](\d{1,2})$", cleaned_date)
+        if m_slash:
+            try:
+                return datetime.date(current_year, int(m_slash.group(1)), int(m_slash.group(2)))
+            except ValueError:
+                return None
+
+        # 3. MMDD or MDD (e.g. 0922 -> 9, 22; 922 -> 9, 22)
+        m_digits = re.match(r"^(\d{1,2})(\d{2})$", cleaned_date)
+        if m_digits:
+            try:
+                return datetime.date(current_year, int(m_digits.group(1)), int(m_digits.group(2)))
+            except ValueError:
+                return None
+
+        return None
+
     @classmethod
     def parse(cls, text: str) -> Command:
         cleaned = text.strip()
@@ -75,7 +122,66 @@ class CommandParser:
         if cls.HELP_PATTERN.match(cleaned):
             return Command(action="help", raw_text=cleaned)
 
-        # 2. 值班查詢：「值班」、「值班底片」、「值班底片殘量」等
+        # 2. 行程預設指令（今日）
+        if cls.SCHEDULE_DEFAULT_PATTERN.match(cleaned):
+            return Command(
+                action="schedule_query",
+                uno=DEFAULT_TECHNICIAN_UNO,
+                target_date=get_taiwan_today(),
+                raw_text=cleaned,
+            )
+
+        # 3. 行程相對日期指令（昨天、昨日、明天、明日）
+        rel_match = cls.SCHEDULE_RELATIVE_PATTERN.match(cleaned)
+        if rel_match:
+            rel_word = rel_match.group(1)
+            today = get_taiwan_today()
+            delta = datetime.timedelta(days=-1) if rel_word in ("昨天", "昨日") else datetime.timedelta(days=1)
+            return Command(
+                action="schedule_query",
+                uno=DEFAULT_TECHNICIAN_UNO,
+                target_date=today + delta,
+                raw_text=cleaned,
+            )
+
+        # 4. 行程指定日期前綴：「行程 0922」、「行程 2026-09-22」
+        prefix_match = cls.SCHEDULE_PREFIX_PATTERN.match(cleaned)
+        if prefix_match:
+            date_arg = prefix_match.group(1)
+            today = get_taiwan_today()
+            parsed_date = cls._parse_date_string(date_arg, today.year)
+            if parsed_date:
+                return Command(
+                    action="schedule_query",
+                    uno=DEFAULT_TECHNICIAN_UNO,
+                    target_date=parsed_date,
+                    raw_text=cleaned,
+                )
+            return Command(
+                action="schedule_query_invalid",
+                raw_text=cleaned,
+            )
+
+        # 5. 行程指定日期後綴：「0922行程」、「0922 行程」、「9/22行程」
+        suffix_match = cls.SCHEDULE_SUFFIX_PATTERN.match(cleaned)
+        if suffix_match:
+            date_arg = suffix_match.group(1)
+            if date_arg not in ("今日", "今天", "昨天", "昨日", "明天", "明日"):
+                today = get_taiwan_today()
+                parsed_date = cls._parse_date_string(date_arg, today.year)
+                if parsed_date:
+                    return Command(
+                        action="schedule_query",
+                        uno=DEFAULT_TECHNICIAN_UNO,
+                        target_date=parsed_date,
+                        raw_text=cleaned,
+                    )
+                return Command(
+                    action="schedule_query_invalid",
+                    raw_text=cleaned,
+                )
+
+        # 6. 值班查詢：「值班」、「值班底片」、「值班底片殘量」等
         if cls.DUTY_QUERY_PATTERN.match(cleaned):
             return Command(
                 action="duty_query",
@@ -85,6 +191,7 @@ class CommandParser:
                 threshold=DEFAULT_QUERY_THRESHOLD,
                 raw_text=cleaned,
             )
+
 
         # 3. 值班帶門檻查詢：「值班 < 20」、「值班底片 30張」等
         duty_threshold_match = cls.DUTY_THRESHOLD_QUERY_PATTERN.match(cleaned)
