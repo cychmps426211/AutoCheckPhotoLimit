@@ -15,7 +15,7 @@
    - `CommandParser` 在解析預設指令（「底片」、「檢查底片」）時，自動指派 `status = 0`、`threshold = 20`，並維持 `include_collaborative = True` 協同機台合併機制。
    - 更新教學說明訊息，提示預設查詢為剩餘張數 <= 20 張。
 2. **多層次異常機台過濾機制**：
-   - 於 `src/config.py` 配置 `EXCLUDED_MACHINE_IDS`（如 `ABC158-ND`，不分大小寫比對）與 `EXCLUDED_MACHINE_NAMES`（如 `高雄職訓中心`，關鍵字比對）。
+   - 於 `src/config.py` 配置 `EXCLUDED_MACHINE_IDS`（如 `ABC158-ND`，不分大小寫比對）與 `EXCLUDED_MACHINE_NAMES`（如 `高雄職訓中心`，關鍵字比對），並支援以逗號、分號（含全半形）或換行分隔設定多筆排除機台。
    - 在 `PaperCrawler` 解析資料的最源頭（`_parse_machine_item` 與 `parse_html_table`）執行過濾，凡符合條件之機台均直接排除，確保無論預設查詢、門檻查詢或指定維修師查詢均不會輸出異常機台。
 3. **契約相容與向後相容**：
    - 保留 `PaperCrawler.fetch_machine_stock` 方法簽名中 `threshold: Optional[int] = None` 之自由度，供特定無門檻查詢或測試場景使用。
@@ -24,4 +24,4 @@
 ## 影響與後果
 - 維修師發送最簡短指令「底片」即可直接取得名下 (91) 與協同 (19) 所有剩餘張數 <= 20 張之機台，巡檢前置時間更加充裕。
 - 異常機台 `ABC158-ND` 被自動排除，消除虛假警報。
-- 異常機台清單支援環境變數擴充，未來若有新測試站或故障站可直接設定排除而無須修改業務程式碼。
+- 異常機台清單支援環境變數擴充（支援逗號、分號等分隔符號設定多站點），未來若有新測試站或故障站可直接設定排除而無須修改業務程式碼。

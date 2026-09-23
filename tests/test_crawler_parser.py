@@ -585,3 +585,44 @@ def test_fetch_machine_stock_duty_area_empty_result(mocker):
     results = crawler.fetch_machine_stock(uno=0, area=46, status=0, threshold=20)
     assert results == []
 
+
+def test_parse_env_set_delimiters():
+    """驗證 _parse_env_set 支援半形分號、全形分號、逗號與末尾分隔符號"""
+    from src.config import _parse_env_set
+
+    # 模擬使用者截圖中的設定
+    raw_ids = "ABC158-ND; ABC461-ND;"
+    parsed_ids = _parse_env_set(raw_ids, uppercase=True)
+    assert parsed_ids == {"ABC158-ND", "ABC461-ND"}
+
+    raw_names = "高雄職訓中心; 台南第一診所;"
+    parsed_names = _parse_env_set(raw_names, uppercase=False)
+    assert parsed_names == {"高雄職訓中心", "台南第一診所"}
+
+    # 支援全形分號、逗號混用與前後空白
+    mixed = "機台A，機台B； 機台C , 機台D ; "
+    assert _parse_env_set(mixed) == {"機台A", "機台B", "機台C", "機台D"}
+
+
+def test_is_excluded_machine_with_multiple_entries(monkeypatch):
+    """驗證當設定多個排除機台（如截圖中的 ABC158-ND 與 ABC461-ND）時，皆能正確被排除"""
+    import src.config as config
+    import src.crawler.paper_crawler as crawler_mod
+
+    mock_ids = {"ABC158-ND", "ABC461-ND"}
+    mock_names = {"高雄職訓中心", "台南第一診所"}
+
+    monkeypatch.setattr(crawler_mod, "EXCLUDED_MACHINE_IDS", mock_ids)
+    monkeypatch.setattr(crawler_mod, "EXCLUDED_MACHINE_NAMES", mock_names)
+
+    # 比對機台代號
+    assert crawler_mod.PaperCrawler._is_excluded_machine("ABC158-ND", "某站點") is True
+    assert crawler_mod.PaperCrawler._is_excluded_machine("abc461-nd", "某站點") is True
+    assert crawler_mod.PaperCrawler._is_excluded_machine("ABC001", "某站點") is False
+
+    # 比對名稱關鍵字
+    assert crawler_mod.PaperCrawler._is_excluded_machine("ABC999", "高雄職訓中心大門") is True
+    assert crawler_mod.PaperCrawler._is_excluded_machine("ABC999", "台南第一診所候診區") is True
+    assert crawler_mod.PaperCrawler._is_excluded_machine("ABC999", "台北旗艦店") is False
+
+

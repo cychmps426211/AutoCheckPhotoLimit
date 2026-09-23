@@ -1,6 +1,6 @@
 # AutoCheckPhotoLimit Line 機器人
 
-[![Tests](https://img.shields.io/badge/tests-87%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-106%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)]()
 [![Free Tier](https://img.shields.io/badge/cost-100%25%20free-success.svg)]()
@@ -69,6 +69,10 @@
 | `SEIWA_ACCOUNT` | **必要** | 無 | Seiwa 後台登入帳號 |
 | `SEIWA_PASSWORD` | **必要** | 無 | Seiwa 後台登入密碼 |
 | `DEFAULT_TECHNICIAN_UNO` | 選填 | `91` | 未指定維修師時之預設維修師編號 |
+| `DEFAULT_QUERY_STATUS` | 選填 | `0` | 預設查詢狀態類別（0=全部狀態，2=接近底限） |
+| `DEFAULT_QUERY_THRESHOLD` | 選填 | `20` | 預設查詢之剩餘張數門檻（<= 20 張） |
+| `EXCLUDED_MACHINE_IDS` | 選填 | `ABC158-ND` | 排除機台代號清單（支援逗號、分號 `,` `;` 或換行分隔多筆，不區分大小寫） |
+| `EXCLUDED_MACHINE_NAMES` | 選填 | `高雄職訓中心` | 排除機台名稱關鍵字清單（支援逗號、分號 `,` `;` 或換行分隔多筆，包含比對） |
 | `DUTY_AREA_NO` | 選填 | `46` | 值班查詢之預設責任區域編號（預設 46 南區） |
 | `DUTY_AREA_NAME` | 選填 | `南區` | 值班查詢之責任區域名稱 |
 | `COLLABORATIVE_CONFIG_PATH` | 選填 | `config/collaborative_machines.json` | 跨維修師協同機台清單設定檔路徑 |
