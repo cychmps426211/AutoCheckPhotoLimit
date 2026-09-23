@@ -1,6 +1,7 @@
 import logging
+import secrets
 from typing import Optional
-from fastapi import FastAPI, Request, Header, HTTPException, status
+from fastapi import FastAPI, Request, Header, HTTPException, status, Depends, Query
 from fastapi.responses import JSONResponse
 from linebot.v3 import WebhookParser
 from linebot.v3.exceptions import InvalidSignatureError
@@ -13,7 +14,13 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 
-from src.config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, PORT, DUTY_AREA_NAME
+from src.config import (
+    LINE_CHANNEL_SECRET,
+    LINE_CHANNEL_ACCESS_TOKEN,
+    PORT,
+    DUTY_AREA_NAME,
+    PUSH_TASK_TOKEN,
+)
 from src.auth.circuit_breaker import CircuitBreakerError
 from src.bot.command_parser import CommandParser
 from src.bot.message_builder import MessageBuilder
@@ -56,6 +63,48 @@ def health_check():
     """
     session_status = crawler.keep_alive()
     return {"status": "ok", "session": session_status}
+
+
+def verify_task_token(
+    x_task_token: Optional[str] = Header(None, alias="X-Task-Token"),
+    token: Optional[str] = Query(None),
+) -> None:
+    """
+    驗證定時任務金鑰，支援 HTTP Header (X-Task-Token) 與 URL 查詢參數 (?token=)。
+    未配置金鑰或金鑰不符時一律拒絕並回傳 HTTP 401 Unauthorized。
+    """
+    configured_token = PUSH_TASK_TOKEN
+    if not configured_token:
+        logger.warning("定時任務金鑰驗證失敗: 伺服器未配置 PUSH_TASK_TOKEN 環境變數")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Task token is not configured on server",
+        )
+    token_valid = (
+        (x_task_token is not None and secrets.compare_digest(x_task_token, configured_token))
+        or (token is not None and secrets.compare_digest(token, configured_token))
+    )
+    if not token_valid:
+        logger.warning("定時任務金鑰驗證失敗: 提供的金鑰無效或未附帶金鑰")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing task token",
+        )
+
+
+@app.api_route(
+    "/tasks/daily-push",
+    methods=["GET", "POST"],
+    dependencies=[Depends(verify_task_token)],
+)
+def daily_push_task():
+    """
+    工作日定時推播任務端點
+    由外部排程服務（如 cron-job.org）於週一至週五 08:00 觸發
+    支援 POST 與相容外部排程之 GET 請求，需通過金鑰認證
+    """
+    logger.info("定時推播任務端點 (/tasks/daily-push) 驗證通過")
+    return {"status": "ok"}
 
 
 

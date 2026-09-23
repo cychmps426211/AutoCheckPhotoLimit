@@ -48,3 +48,6 @@ EXCLUDED_MACHINE_NAMES: set[str] = _parse_env_set(
 DUTY_AREA_NO: int = int(os.getenv("DUTY_AREA_NO", "46"))
 DUTY_AREA_NAME: str = os.getenv("DUTY_AREA_NAME", "南區")
 
+# 定時推播安全任務金鑰 (未設定時預設為空字串，端點將拒絕所有存取)
+PUSH_TASK_TOKEN: str = os.getenv("PUSH_TASK_TOKEN", "")
+
