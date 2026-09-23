@@ -20,6 +20,9 @@ from src.config import (
     PORT,
     DUTY_AREA_NAME,
     PUSH_TASK_TOKEN,
+    DEFAULT_TECHNICIAN_UNO,
+    DEFAULT_QUERY_STATUS,
+    DEFAULT_QUERY_THRESHOLD,
 )
 from src.auth.circuit_breaker import CircuitBreakerError
 from src.bot.command_parser import CommandParser
@@ -103,8 +106,28 @@ def daily_push_task():
     由外部排程服務（如 cron-job.org）於週一至週五 08:00 觸發
     支援 POST 與相容外部排程之 GET 請求，需通過金鑰認證
     """
-    logger.info("定時推播任務端點 (/tasks/daily-push) 驗證通過")
-    return {"status": "ok"}
+    logger.info("定時推播任務端點 (/tasks/daily-push) 驗證通過，開始執行預設底片存量查詢")
+    try:
+        machines = crawler.fetch_machine_stock(
+            uno=DEFAULT_TECHNICIAN_UNO,
+            status=DEFAULT_QUERY_STATUS,
+            threshold=DEFAULT_QUERY_THRESHOLD,
+            include_collaborative=True,
+        )
+    except CircuitBreakerError:
+        logger.warning("定時推播任務: 觸發熔斷保護 (Circuit breaker open)，優雅回傳 503")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "error", "message": "Circuit breaker open"},
+        )
+
+    if not machines:
+        logger.info("定時推播任務: 所有機台底片存量充足 (count=0)，啟動零警報靜默節流 (Zero-Report Suppression)")
+        return {"status": "ok", "action": "suppressed", "count": 0}
+
+    # 若存在需要補充底片之機台 (Ticket 03 將實作 Line MessagingApi.broadcast() 發送)
+    logger.info(f"定時推播任務: 發現 {len(machines)} 台機台需補充底片")
+    return {"status": "ok", "action": "pending_broadcast", "count": len(machines)}
 
 
 
