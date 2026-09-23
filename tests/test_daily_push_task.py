@@ -1,8 +1,12 @@
+import logging
+from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
+from linebot.v3.messaging import BroadcastRequest
 from src.main import app
 import src.config as config
 from src.auth.circuit_breaker import CircuitBreakerError
+from src.bot.message_builder import MachineStock
 
 client = TestClient(app)
 
@@ -15,6 +19,15 @@ def configure_task_token(mocker):
     mocker.patch("src.main.PUSH_TASK_TOKEN", SECRET_TOKEN)
     mocker.patch.object(config, "PUSH_TASK_TOKEN", SECRET_TOKEN)
     return SECRET_TOKEN
+
+
+@pytest.fixture
+def sample_low_stock_machines():
+    """提供標準的低存量警報機台測試資料"""
+    return [
+        MachineStock(machine_id="M1", machine_name="機台1", remaining_sheets=5),
+        MachineStock(machine_id="M2", machine_name="機台2", remaining_sheets=10),
+    ]
 
 
 def test_daily_push_unconfigured_token_rejects_all(mocker):
@@ -145,18 +158,16 @@ def test_daily_push_circuit_breaker_returns_503(configure_task_token, method, mo
     mock_get_msg.assert_not_called()
 
 
-def test_daily_push_low_stock_machines_pending_broadcast(configure_task_token, mocker):
+def test_daily_push_low_stock_machines_broadcast_sent(configure_task_token, sample_low_stock_machines, mocker):
     """
-    驗證當發現低存量機台時，端點正確統計機台數量並回傳 pending_broadcast 狀態
+    驗證當發現低存量機台時：
+    1. 調用 MessageBuilder.build_stock_report 排版警報訊息（緊急排序與 ADR-0008 抬頭）
+    2. 調用 Line MessagingApi.broadcast() 發送全體好友廣播
+    3. 端點回傳 action: 'broadcast_sent' 與機台數量 count: N
     """
-    from src.bot.message_builder import MachineStock
-
-    mock_machines = [
-        MachineStock(machine_id="M1", machine_name="機台1", remaining_sheets=5),
-        MachineStock(machine_id="M2", machine_name="機台2", remaining_sheets=10),
-    ]
-    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=mock_machines)
-    mock_get_msg = mocker.patch("src.main.get_messaging_api")
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=sample_low_stock_machines)
+    mock_api = MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
 
     resp = client.post(
         "/tasks/daily-push",
@@ -166,10 +177,95 @@ def test_daily_push_low_stock_machines_pending_broadcast(configure_task_token, m
     assert resp.status_code == 200
     assert resp.json() == {
         "status": "ok",
-        "action": "pending_broadcast",
+        "action": "broadcast_sent",
         "count": 2,
     }
-    mock_get_msg.assert_not_called()
+    mock_api.broadcast.assert_called_once()
+    broadcast_arg = mock_api.broadcast.call_args[0][0]
+    assert isinstance(broadcast_arg, BroadcastRequest)
+    assert len(broadcast_arg.messages) == 1
+    msg_text = broadcast_arg.messages[0].text
+    assert "⚠️ 【機台底片存量警報】（剩餘張數 <= 20 張）" in msg_text
+    assert "1. 🔴 機台1 (M1)" in msg_text
+    assert "剩餘張數：5 張" in msg_text
+    assert "2. 🔴 機台2 (M2)" in msg_text
+    assert "剩餘張數：10 張" in msg_text
+
+
+def test_daily_push_broadcast_via_get_query_token(configure_task_token, sample_low_stock_machines, mocker):
+    """
+    驗證透過 GET ?token= 亦能正確觸發廣播派發
+    """
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=sample_low_stock_machines)
+    mock_api = MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+
+    resp = client.get(f"/tasks/daily-push?token={SECRET_TOKEN}")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "status": "ok",
+        "action": "broadcast_sent",
+        "count": 2,
+    }
+    mock_api.broadcast.assert_called_once()
+
+
+def test_daily_push_messaging_api_not_configured_returns_500(configure_task_token, sample_low_stock_machines, mocker):
+    """
+    驗證當發現警報機台但伺服器未配置 Line Messaging API 時，優雅回傳 HTTP 500
+    """
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=sample_low_stock_machines)
+    mocker.patch("src.main.get_messaging_api", return_value=None)
+
+    resp = client.post(
+        "/tasks/daily-push",
+        headers={"X-Task-Token": SECRET_TOKEN},
+    )
+    assert resp.status_code == 500
+    assert resp.json() == {
+        "status": "error",
+        "message": "Line Messaging API client not configured",
+    }
+
+
+def test_daily_push_broadcast_failure_returns_502(configure_task_token, sample_low_stock_machines, mocker):
+    """
+    驗證當 Line API 廣播發送失敗拋出例外時，端點捕捉並回傳 HTTP 502 Bad Gateway
+    """
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=sample_low_stock_machines)
+    mock_api = MagicMock()
+    mock_api.broadcast.side_effect = RuntimeError("Line API network timeout")
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+
+    resp = client.post(
+        "/tasks/daily-push",
+        headers={"X-Task-Token": SECRET_TOKEN},
+    )
+    assert resp.status_code == 502
+    assert resp.json() == {
+        "status": "error",
+        "message": "Failed to send Line broadcast: Line API network timeout",
+    }
+
+
+def test_daily_push_logs_audit_information(configure_task_token, sample_low_stock_machines, mocker, caplog):
+    """
+    驗證發送推播時記錄明確的執行日誌（包含警報機台數量與動作標籤），利於對帳與監控每月 200 則配額
+    """
+    mocker.patch("src.main.crawler.fetch_machine_stock", return_value=sample_low_stock_machines)
+    mock_api = MagicMock()
+    mocker.patch("src.main.get_messaging_api", return_value=mock_api)
+
+    with caplog.at_level(logging.INFO):
+        resp = client.post(
+            "/tasks/daily-push",
+            headers={"X-Task-Token": SECRET_TOKEN},
+        )
+
+    assert resp.status_code == 200
+    # 檢查 log 中包含 action=broadcast_sent 與機台數量 count=2
+    log_texts = [rec.message for rec in caplog.records]
+    assert any("action=broadcast_sent" in msg and "count=2" in msg for msg in log_texts)
 
 
 def test_daily_push_session_expired_auto_recovers(configure_task_token, mocker):

@@ -12,6 +12,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
+    BroadcastRequest,
 )
 
 from src.config import (
@@ -122,12 +123,43 @@ def daily_push_task():
         )
 
     if not machines:
-        logger.info("定時推播任務: 所有機台底片存量充足 (count=0)，啟動零警報靜默節流 (Zero-Report Suppression)")
+        logger.info("定時推播任務: 所有機台底片存量充足 (count=0)，啟動零警報靜默節流 (action=suppressed, count=0)")
         return {"status": "ok", "action": "suppressed", "count": 0}
 
-    # 若存在需要補充底片之機台 (Ticket 03 將實作 Line MessagingApi.broadcast() 發送)
-    logger.info(f"定時推播任務: 發現 {len(machines)} 台機台需補充底片")
-    return {"status": "ok", "action": "pending_broadcast", "count": len(machines)}
+    # 存在需要補充底片之警報機台：排版並透過 Line MessagingApi.broadcast() 推播
+    report_text = MessageBuilder.build_stock_report(
+        uno=DEFAULT_TECHNICIAN_UNO,
+        machines=machines,
+        threshold=DEFAULT_QUERY_THRESHOLD,
+    )
+
+    messaging_api = get_messaging_api()
+    if not messaging_api:
+        logger.error(
+            f"定時推播任務: Line Messaging API 未配置 (LINE_CHANNEL_ACCESS_TOKEN 未設定或無效) (action=broadcast_failed, count={len(machines)})"
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"status": "error", "message": "Line Messaging API client not configured"},
+        )
+
+    try:
+        messaging_api.broadcast(
+            BroadcastRequest(messages=[TextMessage(text=report_text)])
+        )
+        logger.info(
+            f"定時推播任務: 成功發送 Line 全體好友廣播，警報機台數量: {len(machines)} (action=broadcast_sent, count={len(machines)})"
+        )
+    except Exception as e:
+        logger.error(
+            f"定時推播任務: 發送 Line 全體好友廣播失敗: {e} (action=broadcast_failed, count={len(machines)})"
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"status": "error", "message": f"Failed to send Line broadcast: {str(e)}"},
+        )
+
+    return {"status": "ok", "action": "broadcast_sent", "count": len(machines)}
 
 
 

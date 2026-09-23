@@ -12,7 +12,7 @@
 ## 核心設計與特色
 
 1. **100% 免費運作模式**：
-   - 嚴格僅透過 Line Webhook 事件中的單次**回覆令牌 (Reply Token)** 進行被動回覆，絕不使用主動推播 (Push Message)，徹底避開 Line 每月免費額度限制。
+   - 現場維修師日常主動互動查詢嚴格維持透過單次**回覆令牌 (Reply Token)** 進行被動回覆，工作日定時推播則在每月 200 則免費配額內搭配**零警報靜默節流**有限度使用廣播，達成零通訊與零主機營運成本。
    - 託管於 Render 免費方案，搭配外部定時服務達成零主機營運成本。
 
 2. **本地離線驗證碼辨識 (Captcha OCR)**：
@@ -26,6 +26,9 @@
 
 5. **定時心跳保活機制 (Keep-Alive)**：
    - 提供專屬 `/health` 端點，供外部定時排程（如 cron-job.org）每 10 分鐘發送 GET 請求，同時防止 Render 免費方案 15 分鐘閒置休眠（Spin-down）並探測後台維持 Session 活躍。
+
+6. **工作日定時推播與零警報靜默節流 (Scheduled Push & Zero-Report Suppression)**：
+   - 依據 ADR-0009，外部排程於週一至週五 08:00 觸發安全端點 `/tasks/daily-push`。機台底片充足時靜默不發送（消耗 0 則）；僅在發現剩餘張數 `<= 20` 張之機台時，透過 Line 全體廣播 (Broadcast API) 發送警報清單至維修師私聊室，嚴格守護每月 200 則免費配額。詳見 [`docs/setup-daily-push.md`](docs/setup-daily-push.md)。
 
 ---
 
@@ -76,6 +79,7 @@
 | `COLLABORATIVE_CONFIG_PATH` | 選填 | `config/collaborative_machines.json` | 跨維修師協同機台清單設定檔路徑 |
 | `LINE_CHANNEL_SECRET` | **必要** | 無 | Line Developers Messaging API Channel Secret |
 | `LINE_CHANNEL_ACCESS_TOKEN` | **必要** | 無 | Line Developers Messaging API Channel Access Token |
+| `PUSH_TASK_TOKEN` | 選填 | 空字串 | 工作日定時推播任務安全金鑰（未設定時端點拒絕所有存取以防惡意觸發） |
 | `PORT` | 選填 | `8000` | 伺服器監聽埠號（雲端平台通常自動提供） |
 
 ### 協同機台設定 (`config/collaborative_machines.json`)
@@ -189,6 +193,19 @@ Render 免費方案在**閒置 15 分鐘後會自動休眠 (Spin-down)**，首�
 
 ---
 
+## 工作日定時推播設定 (Scheduled Daily Push)
+
+如欲開啟週一至週五 08:00 自動巡檢並發送底片存量警報，請參閱專屬教學文件：
+👉 **[`docs/setup-daily-push.md`](docs/setup-daily-push.md)**
+
+該文件包含：
+- `PUSH_TASK_TOKEN` 安全金鑰產生與配置說明
+- cron-job.org 完整工作日排程建立步驟（時區 Asia/Taipei 與 Cron 語法）
+- 零警報靜默節流（Zero-Report Suppression）運作機制
+- 每月 200 則免費 Push 額度對帳與伺服器日誌查驗方法
+
+---
+
 ## Line 機器人 Webhook 設定
 
 1. 登入 [Line Developers Console](https://developers.line.biz/console/)。
@@ -208,11 +225,12 @@ Render 免費方案在**閒置 15 分鐘後會自動休眠 (Spin-down)**，首�
 
 ## 相關架構決策 (ADRs)
 
-- [ADR-0001: 離線 OCR 驗證碼辨識與連線會話保持](file:///e:/AutoCheckPhotoLimit/docs/adr/0001-captcha-ocr-and-session-retention.md)
-- [ADR-0002: 嚴格透過 Line 被動回覆令牌 (replyToken) 回傳訊息](file:///e:/AutoCheckPhotoLimit/docs/adr/0002-line-reply-token-only.md)
-- [ADR-0003: 託管於 Render 免費方案並結合外部定期心跳 (Keep-Alive)](file:///e:/AutoCheckPhotoLimit/docs/adr/0003-free-hosting-with-external-keepalive.md)
-- [ADR-0004: 採用獨立設定檔管理跨維修師協同機台與預設查詢合併策略](file:///e:/AutoCheckPhotoLimit/docs/adr/0004-collaborative-machines-configuration.md)
-- [ADR-0005: 預設查詢改為全部狀態門檻20張並過濾異常機台 (ABC158-ND)](file:///e:/AutoCheckPhotoLimit/docs/adr/0005-default-query-threshold-and-abnormal-machine-filter.md)
-- [ADR-0006: 新增南區值班底片殘量查詢模式 (area=46, s=0)](file:///e:/AutoCheckPhotoLimit/docs/adr/0006-on-duty-stock-query-for-south-area.md)
-- [ADR-0007: 新增維修師維護行程查詢功能 (UserMonth.php)](file:///e:/AutoCheckPhotoLimit/docs/adr/0007-maintenance-schedule-query.md)
-- [ADR-0008: 精簡機器人自動回覆訊息格式](file:///e:/AutoCheckPhotoLimit/docs/adr/0008-simplify-bot-reply-messages.md)
+- [ADR-0001: 離線 OCR 驗證碼辨識與連線會話保持](docs/adr/0001-captcha-ocr-and-session-retention.md)
+- [ADR-0002: 嚴格透過 Line 被動回覆令牌 (replyToken) 回傳訊息](docs/adr/0002-line-reply-token-only.md)
+- [ADR-0003: 託管於 Render 免費方案並結合外部定期心跳 (Keep-Alive)](docs/adr/0003-free-hosting-with-external-keepalive.md)
+- [ADR-0004: 採用獨立設定檔管理跨維修師協同機台與預設查詢合併策略](docs/adr/0004-collaborative-machines-configuration.md)
+- [ADR-0005: 預設查詢改為全部狀態門檻20張並過濾異常機台 (ABC158-ND)](docs/adr/0005-default-query-threshold-and-abnormal-machine-filter.md)
+- [ADR-0006: 新增南區值班底片殘量查詢模式 (area=46, s=0)](docs/adr/0006-on-duty-stock-query-for-south-area.md)
+- [ADR-0007: 新增維修師維護行程查詢功能 (UserMonth.php)](docs/adr/0007-maintenance-schedule-query.md)
+- [ADR-0008: 精簡機器人自動回覆訊息格式](docs/adr/0008-simplify-bot-reply-messages.md)
+- [ADR-0009: 引入定時推播機制與零警報靜默節流策略](docs/adr/0009-scheduled-push-with-zero-alert-suppression.md)
