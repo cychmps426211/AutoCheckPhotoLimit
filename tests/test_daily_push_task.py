@@ -25,8 +25,8 @@ def configure_task_token(mocker):
 def sample_low_stock_machines():
     """提供標準的低存量警報機台測試資料"""
     return [
-        MachineStock(machine_id="M1", machine_name="機台1", remaining_sheets=5),
-        MachineStock(machine_id="M2", machine_name="機台2", remaining_sheets=10),
+        MachineStock(machine_id="M1", machine_name="機台1", remaining_sheets=5, in_charge="維修師A"),
+        MachineStock(machine_id="M2", machine_name="機台2", remaining_sheets=10, in_charge="維修師B"),
     ]
 
 
@@ -123,10 +123,11 @@ def test_daily_push_zero_alert_suppression(configure_task_token, method, mocker)
         "count": 0,
     }
     mock_fetch.assert_called_once_with(
-        uno=91,
+        uno=0,
         status=0,
         threshold=20,
-        include_collaborative=True,
+        area=46,
+        include_collaborative=False,
     )
     mock_get_msg.assert_not_called()
 
@@ -161,7 +162,7 @@ def test_daily_push_circuit_breaker_returns_503(configure_task_token, method, mo
 def test_daily_push_low_stock_machines_broadcast_sent(configure_task_token, sample_low_stock_machines, mocker):
     """
     驗證當發現低存量機台時：
-    1. 調用 MessageBuilder.build_stock_report 排版警報訊息（緊急排序與 ADR-0008 抬頭）
+    1. 調用 MessageBuilder.build_duty_stock_report 排版南區值班警報訊息（緊急排序與責任維修師標示）
     2. 調用 Line MessagingApi.broadcast() 發送全體好友廣播
     3. 端點回傳 action: 'broadcast_sent' 與機台數量 count: N
     """
@@ -185,10 +186,10 @@ def test_daily_push_low_stock_machines_broadcast_sent(configure_task_token, samp
     assert isinstance(broadcast_arg, BroadcastRequest)
     assert len(broadcast_arg.messages) == 1
     msg_text = broadcast_arg.messages[0].text
-    assert "⚠️ 【機台底片存量警報】（剩餘張數 <= 20 張）" in msg_text
-    assert "1. 🔴 機台1 (M1)" in msg_text
+    assert "⚠️ 【南區值班 機台底片存量警報】（剩餘張數 <= 20 張）" in msg_text
+    assert "1. 🔴 機台1 (M1) [負責維修師: 維修師A]" in msg_text
     assert "剩餘張數：5 張" in msg_text
-    assert "2. 🔴 機台2 (M2)" in msg_text
+    assert "2. 🔴 機台2 (M2) [負責維修師: 維修師B]" in msg_text
     assert "剩餘張數：10 張" in msg_text
 
 

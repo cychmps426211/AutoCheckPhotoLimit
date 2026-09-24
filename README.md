@@ -28,7 +28,7 @@
    - 提供專屬 `/health` 端點，供外部定時排程（如 cron-job.org）每 10 分鐘發送 GET 請求，同時防止 Render 免費方案 15 分鐘閒置休眠（Spin-down）並探測後台維持 Session 活躍。
 
 6. **工作日定時推播與零警報靜默節流 (Scheduled Push & Zero-Report Suppression)**：
-   - 依據 ADR-0009，外部排程於週一至週五 08:00 觸發安全端點 `/tasks/daily-push`。機台底片充足時靜默不發送（消耗 0 則）；僅在發現剩餘張數 `<= 20` 張之機台時，透過 Line 全體廣播 (Broadcast API) 發送警報清單至維修師私聊室，嚴格守護每月 200 則免費配額。詳見 [`docs/setup-daily-push.md`](docs/setup-daily-push.md)。
+   - 依據 ADR-0009 與 ADR-0010，外部排程於週一至週五 08:00 觸發安全端點 `/tasks/daily-push` 執行南區值班底片存量查詢（`area=46, s=0`）。機台底片充足時靜默不發送（消耗 0 則）；僅在發現剩餘張數 `<= 20` 張之機台時，透過 Line 全體廣播 (Broadcast API) 發送標註負責維修師之警報清單至維修師私聊室，嚴格守護每月 200 則免費配額。詳見 [`docs/setup-daily-push.md`](docs/setup-daily-push.md)。
 
 ---
 
@@ -234,3 +234,4 @@ Render 免費方案在**閒置 15 分鐘後會自動休眠 (Spin-down)**，首�
 - [ADR-0007: 新增維修師維護行程查詢功能 (UserMonth.php)](docs/adr/0007-maintenance-schedule-query.md)
 - [ADR-0008: 精簡機器人自動回覆訊息格式](docs/adr/0008-simplify-bot-reply-messages.md)
 - [ADR-0009: 引入定時推播機制與零警報靜默節流策略](docs/adr/0009-scheduled-push-with-zero-alert-suppression.md)
+- [ADR-0010: 工作日定時推播改採南區值班底片存量查詢模式 (area=46, s=0)](docs/adr/0010-scheduled-push-south-duty-area.md)

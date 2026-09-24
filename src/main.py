@@ -19,9 +19,9 @@ from src.config import (
     LINE_CHANNEL_SECRET,
     LINE_CHANNEL_ACCESS_TOKEN,
     PORT,
+    DUTY_AREA_NO,
     DUTY_AREA_NAME,
     PUSH_TASK_TOKEN,
-    DEFAULT_TECHNICIAN_UNO,
     DEFAULT_QUERY_STATUS,
     DEFAULT_QUERY_THRESHOLD,
 )
@@ -106,14 +106,20 @@ def daily_push_task():
     工作日定時推播任務端點
     由外部排程服務（如 cron-job.org）於週一至週五 08:00 觸發
     支援 POST 與相容外部排程之 GET 請求，需通過金鑰認證
+    執行南區值班底片殘量查詢 (area=46, s=0)
     """
-    logger.info("定時推播任務端點 (/tasks/daily-push) 驗證通過，開始執行預設底片存量查詢")
+    logger.info(
+        "定時推播任務端點 (/tasks/daily-push) 驗證通過，開始執行南區值班底片殘量查詢 (area=%s, s=%s)",
+        DUTY_AREA_NO,
+        DEFAULT_QUERY_STATUS,
+    )
     try:
         machines = crawler.fetch_machine_stock(
-            uno=DEFAULT_TECHNICIAN_UNO,
+            uno=0,
             status=DEFAULT_QUERY_STATUS,
             threshold=DEFAULT_QUERY_THRESHOLD,
-            include_collaborative=True,
+            area=DUTY_AREA_NO,
+            include_collaborative=False,
         )
     except CircuitBreakerError:
         logger.warning("定時推播任務: 觸發熔斷保護 (Circuit breaker open)，優雅回傳 503")
@@ -127,8 +133,8 @@ def daily_push_task():
         return {"status": "ok", "action": "suppressed", "count": 0}
 
     # 存在需要補充底片之警報機台：排版並透過 Line MessagingApi.broadcast() 推播
-    report_text = MessageBuilder.build_stock_report(
-        uno=DEFAULT_TECHNICIAN_UNO,
+    report_text = MessageBuilder.build_duty_stock_report(
+        area_name=DUTY_AREA_NAME,
         machines=machines,
         threshold=DEFAULT_QUERY_THRESHOLD,
     )

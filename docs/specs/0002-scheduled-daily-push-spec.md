@@ -1,23 +1,23 @@
-# Spec: 工作日定時推播預設底片存量查詢 (Scheduled Daily Push)
+# Spec: 工作日定時推播南區值班底片存量查詢 (Scheduled Daily Push)
 
 ## Problem Statement
 
-現場維修師每天早晨（週一至週五 08:00）開始日常巡檢前，需了解負責機台與協同機台的底片存量狀況。目前系統雖支援透過 Line 聊天室發送指令查詢，但維修師常因出勤匆忙而遺漏手動查詢，導致無法在出發前及早獲悉瀕臨缺紙的機台。
+現場維修師每天早晨（週一至週五 08:00）開始日常巡檢前，需了解南區責任區域內機台的底片存量狀況。目前系統雖支援透過 Line 聊天室發送「值班」指令查詢，但維修師常因出勤匆忙而遺漏手動查詢，導致無法在出發前及早獲悉瀕臨缺紙的機台。
 
 此外，Line 官方帳號免費方案每月僅有 200 則主動推播（Push Message）額度。若不加節制地每天無差別推播，或是推播至多人大群組，極易超出免費用量上限；但若所有機台存量充足時依然每天發送通知，亦會造成不必要的訊息疲勞與額度浪費。
 
 ## Solution
 
-在系統中建立一個安全的定時推播端點，配合外部定時排程服務（如 cron-job.org），在每週一至週五 08:00 自動觸發執行預設底片存量查詢。
+在系統中建立一個安全的定時推播端點，配合外部定時排程服務（如 cron-job.org），在每週一至週五 08:00 自動觸發執行南區值班底片存量查詢（`area=46, s=0`）。
 
-系統結合「零警報靜默節流（Zero-Report Suppression）」機制：若所有機台底片皆大於門檻（無剩餘張數 <= 20 張之機台），系統靜默不推播任何訊息，保護每月 200 則免費額度；僅在存在需補充底片之警報機台時，才透過 Line Broadcast API 將緊急排序之存量清單發送至 2 位維修師的私聊室。端點實施安全金鑰驗證，防止未授權存取與額度消耗，並全面整合離線 OCR 自動重登防護。
+系統結合「零警報靜默節流（Zero-Report Suppression）」機制：若所有機台底片皆大於門檻（無剩餘張數 <= 20 張之機台），系統靜默不推播任何訊息，保護每月 200 則免費額度；僅在存在需補充底片之警報機台時，才透過 Line Broadcast API 將緊急排序且標記各機台責任維修師之值班存量清單發送至維修師的私聊室。端點實施安全金鑰驗證，防止未授權存取與額度消耗，並全面整合離線 OCR 自動重登防護。
 
 ## User Stories
 
 1. As a 維修師, I want the system to automatically inspect machine film stocks every weekday morning at 08:00, so that I am notified of urgent replenishment needs before starting my daily maintenance rounds without needing to query manually.
 2. As a 維修師, I want to receive the morning film stock alert directly in my 1-on-1 Line chat via broadcast, so that I can see the low-stock report conveniently without configuring personal user IDs or checking separate groups.
 3. As a 維修師, I want low-stock machines in the morning push alert sorted by 剩餘張數 in ascending order (緊急排序), so that the most critical machines needing immediate replenishment appear at the very top.
-4. As a 維修師, I want the scheduled query to automatically include 協同機台 alongside machines assigned to the 預設維修師, so that my entire daily coverage scope is monitored in a single consolidated alert.
+4. As a 維修師, I want the scheduled query to cover the entire south duty area (`area=46, s=0`) and clearly display each machine's 負責維修師 (InCharge), so that my entire daily coverage scope across the team is monitored in a single consolidated alert.
 5. As a 維修師, I want 異常機台 (such as known defective or test machines) automatically filtered out of the morning push alert, so that I am not distracted by false alarms.
 6. As a 維修師, I want the system to remain silent and send no message when all machines have sufficient film stock (> 20 sheets), so that I am not bothered by redundant notifications on days when no action is needed.
 7. As a 維修師, I want each alerted machine to clearly display its name, ID, remaining sheets, and urgency indicators (🔴/🟠/🟡), so that I can prioritize and navigate to the right location quickly.
@@ -45,13 +45,13 @@
   - Enforces mandatory token authentication via `X-Task-Token` request header or `token` query parameter, validated against an environment-configured secret token.
   - If the secret token is unconfigured or mismatched, the endpoint rejects the request with HTTP 401 Unauthorized.
 - **Query & Filter Logic**:
-  - Reuses the existing crawler service to perform a 預設查詢 (`uno=91`, `status=0`, `threshold=20`, `include_collaborative=True`).
+  - Reuses the existing crawler service to perform a 南區值班存量查詢 (`uno=0`, `area=46`, `status=0`, `threshold=20`, `include_collaborative=False`).
   - Automatic filtering of 異常機台 and ascending urgency sorting (`remaining_sheets`) are preserved verbatim through existing domain logic.
 - **Zero-Report Suppression Strategy**:
   - If the query returns 0 machines below or equal to the threshold (all machines have sufficient stock), the push dispatcher is bypassed completely.
   - The endpoint returns a successful JSON status indicating suppression (`action: "suppressed"`), consuming 0 Line push quota.
 - **Line Broadcast Dispatcher**:
-  - When alert machines are present, formats the report via the standardized stock report message builder.
+  - When alert machines are present, formats the report via the duty stock report message builder (`MessageBuilder.build_duty_stock_report`), displaying the area duty header and responsible technician for each machine.
   - Dispatches the report using the Line Messaging API's broadcast mechanism, reaching all added technician friends simultaneously.
 - **Fault Tolerance & Session Resilience**:
   - Inherits the automatic session recovery mechanism: if the backend session is expired, the session manager performs in-memory captcha acquisition and offline OCR classification (`ddddocr`) before querying.

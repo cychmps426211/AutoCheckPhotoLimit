@@ -1,15 +1,15 @@
-# 工作日定時推播預設底片存量查詢設定教學 (Scheduled Daily Push Setup Guide)
+# 工作日定時推播南區值班底片存量查詢設定教學 (Scheduled Daily Push Setup Guide)
 
-本文件提供「工作日定時推播預設底片存量查詢」功能的完整架構說明、安全金鑰設定與外部排程平台（以 cron-job.org 為例）設定步驟。
+本文件提供「工作日定時推播南區值班底片存量查詢」功能的完整架構說明、安全金鑰設定與外部排程平台（以 cron-job.org 為例）設定步驟。
 
 ---
 
 ## 1. 架構概述與零警報靜默節流 (Zero-Report Suppression)
 
 ### 背景與設計理念
-現場維修師於週一至週五早晨 08:00 開始日常巡檢。本功能透過外部定時排程服務自動觸發系統查詢預設維修師（91）與協同機台之底片存量，並在發現低存量機台時主動透過 Line 發送推播警報。
+現場維修師於週一至週五早晨 08:00 開始日常巡檢。本功能透過外部定時排程服務自動觸發系統查詢南區全區機台（`area=46, s=0`）之值班底片存量，並在發現低存量機台時主動透過 Line 發送推播警報。
 
-依據 [ADR-0009](adr/0009-scheduled-push-with-zero-alert-suppression.md) 與 `CONTEXT.md`：
+依據 [ADR-0009](adr/0009-scheduled-push-with-zero-alert-suppression.md)、[ADR-0010](adr/0010-scheduled-push-south-duty-area.md) 與 `CONTEXT.md`：
 - **安全金鑰防護**：端點 `/tasks/daily-push` 受 `PUSH_TASK_TOKEN` 安全保護，防止未授權網路爬蟲惡意觸發或耗損配額。
 - **全體好友廣播 (Broadcast API)**：推播使用 Line `MessagingApi.broadcast()` 發送，直接推播至現場維修師私聊室，無需在系統中維護個人 Line User ID。
 - **零警報靜默節流 (Zero-Report Suppression)**：若所有機台存量皆充足（剩餘張數全部 `> 20` 張），系統**完全不呼叫 Line API**，回傳 `action: "suppressed"`，確保每月 200 則免費 Push 配額零浪費。
@@ -21,11 +21,11 @@
 flowchart TD
     Cron["外部定時排程 (cron-job.org)<br>週一至週五 08:00 (UTC+8)"] -->|POST /tasks/daily-push<br>Header: X-Task-Token| API["FastAPI 端點 (/tasks/daily-push)"]
     API -->|金鑰驗證未通過| Ret401["回傳 HTTP 401 Unauthorized"]
-    API -->|金鑰驗證通過| Query["執行預設底片存量查詢<br>(uno=91, s=0, threshold=20, 協同機台)"]
+    API -->|金鑰驗證通過| Query["執行南區值班底片存量查詢<br>(area=46, s=0, threshold=20)"]
     Query -->|熔斷保護啟動| Ret503["優雅降級回傳 HTTP 503"]
     Query -->|查詢成功| Check{"是否有警報機台？<br>(剩餘張數 <= 20)"}
     Check -->|無 (count=0)| Suppress["零警報靜默節流 (Zero-Report Suppression)<br>不調用 Line API<br>回傳 action: 'suppressed'"]
-    Check -->|有 (count > 0)| Format["依緊急程度排序格式化 (ADR-0008)"]
+    Check -->|有 (count > 0)| Format["依緊急程度排序格式化值班警報<br>(含負責維修師)"]
     Format --> Broadcast["Line MessagingApi.broadcast() 發送廣播"]
     Broadcast --> Ret200["記錄審計日誌<br>回傳 action: 'broadcast_sent'"]
 ```
